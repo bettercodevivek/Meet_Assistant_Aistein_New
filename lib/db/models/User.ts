@@ -16,6 +16,8 @@ export interface IUser extends Document {
   lastLoginAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
   isActive: boolean;
+  /** Optional; used by voice agent / CRM-style lookups */
+  phone?: string;
   googleIntegration?: IGoogleIntegration;
 }
 
@@ -63,6 +65,11 @@ const UserSchema = new Schema<IUser>({
   isActive: {
     type: Boolean,
     default: true,
+  },
+  phone: {
+    type: String,
+    trim: true,
+    required: false,
   },
   googleIntegration: {
     type: GoogleIntegrationSchema,

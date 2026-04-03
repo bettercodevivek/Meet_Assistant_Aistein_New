@@ -4,12 +4,13 @@ import type { HeyGenAvatarCatalogItem } from "@/lib/avatars/types";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Star } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 
 import { Input } from "@/components/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
   MEETING_AVATAR_PICK_LIMIT,
+  removeFavoriteAvatar,
   toggleFavoriteAvatar,
 } from "@/lib/avatars/favoritesStorage";
 import { useFavoriteAvatars } from "@/lib/avatars/useFavoriteAvatars";
@@ -33,11 +34,13 @@ function AvatarPreviewCard({
 }) {
   const showVideo = hoverVideoId === item.avatar_id;
 
+  const atLimitBlocked = !selected && !canAdd;
+
   return (
     <div
       className={`flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow ${
         selected
-          ? "border-brand-500 ring-2 ring-brand-500/20"
+          ? "border-brand-500 ring-2 ring-brand-500/25"
           : "border-slate-200 hover:border-slate-300"
       }`}
       onMouseEnter={() => onHoverChange(item.avatar_id)}
@@ -69,33 +72,45 @@ function AvatarPreviewCard({
             {item.avatar_name}
           </p>
         </div>
+        {selected ? (
+          <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
+            In list
+          </span>
+        ) : null}
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-slate-100 p-2">
+      <div className="shrink-0 border-t border-slate-200 bg-slate-50/90 p-2">
         <button
-          className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+          className={`inline-flex min-h-[2.25rem] w-full items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
             selected
-              ? "bg-brand-600 text-white hover:bg-brand-700"
+              ? "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50"
               : canAdd
-                ? "bg-slate-100 text-primary hover:bg-slate-200"
-                : "cursor-not-allowed bg-slate-50 text-tertiary"
+                ? "bg-brand-600 text-white hover:bg-brand-700"
+                : "cursor-not-allowed bg-slate-200 text-slate-600"
           }`}
-          disabled={!selected && !canAdd}
+          disabled={atLimitBlocked}
           title={
             selected
               ? "Remove from meeting avatars"
               : canAdd
                 ? "Add to meeting avatars"
-                : `Up to ${MEETING_AVATAR_PICK_LIMIT} avatars — remove one to add another`
+                : `You already have ${MEETING_AVATAR_PICK_LIMIT} avatars — remove one from the list above`
           }
           type="button"
           onClick={onToggle}
         >
-          <Star
-            aria-hidden
-            className={`h-3.5 w-3.5 ${selected ? "fill-current" : ""}`}
-            strokeWidth={1.75}
-          />
-          {selected ? "Selected" : "Select"}
+          {selected ? (
+            <>
+              <X aria-hidden className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+              Remove
+            </>
+          ) : canAdd ? (
+            <>
+              <Plus aria-hidden className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+              Add to list
+            </>
+          ) : (
+            <>Max {MEETING_AVATAR_PICK_LIMIT} — free a slot</>
+          )}
         </button>
       </div>
     </div>
@@ -194,8 +209,21 @@ export default function GalleryPage() {
               return (
                 <li
                   key={f.id}
-                  className="flex w-[100px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                  className="relative flex w-[108px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                 >
+                  <button
+                    aria-label={`Remove ${f.name} from meeting avatars`}
+                    className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-md ring-1 ring-white/30 transition hover:bg-red-600 hover:ring-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                    title="Remove from meeting avatars"
+                    type="button"
+                    onClick={() =>
+                      setFavoritesAndPersist(
+                        removeFavoriteAvatar(favorites, f.id),
+                      )
+                    }
+                  >
+                    <X aria-hidden className="h-4 w-4" strokeWidth={2.5} />
+                  </button>
                   <div className="relative aspect-[3/4] bg-slate-200">
                     {meta?.preview_image_url ? (
                       <img
@@ -205,12 +233,12 @@ export default function GalleryPage() {
                         src={meta.preview_image_url}
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-[10px] text-tertiary">
+                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-secondary">
                         No preview
                       </div>
                     )}
                   </div>
-                  <p className="line-clamp-2 p-1.5 text-[10px] leading-tight text-primary">
+                  <p className="line-clamp-2 border-t border-slate-100 bg-slate-50/80 p-1.5 text-[10px] leading-tight text-primary">
                     {f.name}
                   </p>
                 </li>

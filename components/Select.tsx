@@ -10,6 +10,8 @@ interface SelectProps<T> {
   value: string | null | undefined;
   placeholder?: string;
   disabled?: boolean;
+  /** Stable unique key per option (avoids duplicate keys when labels repeat). */
+  getOptionKey?: (option: T, index: number) => string;
 }
 
 export function Select<T>(props: SelectProps<T>) {
@@ -31,12 +33,15 @@ export function Select<T>(props: SelectProps<T>) {
           sideOffset={5}
         >
           <SelectPrimitive.Viewport className="py-1">
-            {props.options.map((option) => {
+            {props.options.map((option, index) => {
               const isSelected = props.isSelected(option);
+              const rowKey = props.getOptionKey
+                ? props.getOptionKey(option, index)
+                : `opt-${index}-${String(props.renderOption(option))}`;
 
               return (
                 <div
-                  key={String(props.renderOption(option))}
+                  key={rowKey}
                   className={`cursor-pointer px-3 py-2.5 text-sm outline-none transition-colors ${
                     isSelected ? 'bg-brand-50 text-brand-600' : 'text-secondary hover:bg-slate-50'
                   }`}

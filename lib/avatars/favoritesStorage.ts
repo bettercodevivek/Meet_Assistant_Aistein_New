@@ -76,6 +76,13 @@ export function writeFavoriteAvatars(items: FavoriteAvatar[]): void {
   localStorage.setItem(FAVORITE_AVATARS_STORAGE_KEY, JSON.stringify(next));
 }
 
+export function removeFavoriteAvatar(
+  current: FavoriteAvatar[],
+  id: string,
+): FavoriteAvatar[] {
+  return current.filter((f) => f.id !== id);
+}
+
 export function toggleFavoriteAvatar(
   current: FavoriteAvatar[],
   item: Pick<HeyGenAvatarCatalogItem, "avatar_id" | "avatar_name">,

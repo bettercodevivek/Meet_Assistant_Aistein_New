@@ -246,6 +246,11 @@ function MeetingFormModal({
             </label>
             <Select<AvatarOption>
               options={[...meetingAvatars, "CUSTOM"]}
+              getOptionKey={(opt, index) =>
+                opt === "CUSTOM"
+                  ? "__avatar_custom__"
+                  : `${(opt as MeetingAvatarRow).avatar_id}-${index}`
+              }
               placeholder="Select avatar"
               value={
                 meetingAvatars.some((a) => a.avatar_id === avatarId)

@@ -335,6 +335,7 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
       <MeetSessionLive
         conversation={conversation}
         guestName={guestName}
+        guestToken={guestTokenRef.current ?? ''}
         micStream={micStreamRef.current}
         onMessageSent={handleMessageSent}
         onEndCall={() => void handleEndCall()}

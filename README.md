@@ -160,6 +160,9 @@ Create **`.env`** and/or **`.env.local`** (Next.js loads both; local overrides f
 | `MONGODB_URI` | Recommended | MongoDB connection string. Default in app code: `mongodb://localhost:27017/ai_avatar_studio` |
 | `JWT_SECRET` | **Production** | Secret for signing JWTs. Code falls back to a placeholder if unset (dev only). |
 | `OPENAI_API_KEY` | No | Enables richer conversation summaries on continue; otherwise template-based summary. |
+| `LIVEKIT_URL` | **Yes** (public meets) | WebSocket URL for your LiveKit project, e.g. `wss://your-project.livekit.cloud` (same value as the Python agent). Used to mint guest tokens and dispatch `liveavatar-agent`. |
+| `LIVEKIT_API_KEY` | **Yes** (public meets) | LiveKit API key (server-side only). |
+| `LIVEKIT_API_SECRET` | **Yes** (public meets) | LiveKit API secret (server-side only). |
 
 **Example `.env` template:**
 
@@ -169,6 +172,9 @@ NEXT_PUBLIC_BASE_API_URL=https://api.heygen.com
 MONGODB_URI=mongodb://localhost:27017/ai_avatar_studio
 JWT_SECRET=your-long-random-secret
 OPENAI_API_KEY=sk-optional
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
 ```
 
 ---
@@ -308,6 +314,7 @@ Base URL: same origin (e.g. `http://localhost:3000`). Most routes expect `Cookie
 | POST | `/api/conversations/[id]/messages` | Add message |
 | POST | `/api/conversations/[id]/end` | End session |
 | POST | `/api/conversations/[id]/continue` | Resume: summary + sessionContext |
+| POST | `/api/conversations/[id]/livekit-session` | Guest: header `x-guest-token`. Creates LiveKit room `meet-{conversationId}`, dispatches `liveavatar-agent` with `{ conversationId }` metadata, returns `{ serverUrl, roomName, token }` for `livekit-client`. |
 
 ### Knowledge bases
 
@@ -330,6 +337,10 @@ Base URL: same origin (e.g. `http://localhost:3000`). Most routes expect `Cookie
 | GET, POST | `/api/admin/api-key` | Read/update HeyGen key (writes `.env.local`) |
 
 ---
+
+## Public meet links & LiveKit
+
+Guest **`/meet/[meetingId]`** sessions connect to **your** LiveKit project: the app calls **`POST /api/conversations/[id]/livekit-session`** (with `x-guest-token`) to create the room, dispatch the **`liveavatar-agent`** worker (same name as in `Liveavatar/src/agent.py`), and return a guest JWT. Run the Python agent against the **same** `LIVEKIT_*` credentials. **LiveAvatar’s API only accepts a UUID for `avatar_id`:** HeyGen-style ids on the meeting (e.g. `Amelia_standing_…`) are omitted from dispatch metadata, and the agent falls back to **`LIVEAVATAR_AVATAR_ID`** in `Liveavatar/.env` (must be a UUID from LiveAvatar). Dashboard chats that use HeyGen Streaming Avatar are unchanged.
 
 ## HeyGen & avatar flow
 

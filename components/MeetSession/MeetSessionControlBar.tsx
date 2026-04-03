@@ -1,7 +1,6 @@
 'use client';
 
 import { MessageSquare, Mic, MicOff, PhoneOff, Settings, Subtitles } from 'lucide-react';
-import { useVoiceChat } from '@/components/logic/useVoiceChat';
 
 function lightenHex(hex: string, pct: number) {
   const n = hex.replace('#', '');
@@ -12,6 +11,12 @@ function lightenHex(hex: string, pct: number) {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
+export type MeetSessionMicProps = {
+  muted: boolean;
+  active: boolean;
+  onToggle: () => void;
+};
+
 export function MeetSessionControlBar({
   chatOpen,
   onChatToggle,
@@ -19,6 +24,7 @@ export function MeetSessionControlBar({
   onCaptionsToggle,
   onSettingsOpen,
   onEndCall,
+  mic,
 }: {
   chatOpen: boolean;
   onChatToggle: () => void;
@@ -26,19 +32,14 @@ export function MeetSessionControlBar({
   onCaptionsToggle: () => void;
   onSettingsOpen: () => void;
   onEndCall: () => void;
+  mic: MeetSessionMicProps;
 }) {
-  const { isMuted, muteInputAudio, unmuteInputAudio, isVoiceChatActive } = useVoiceChat();
-
   const toggleMic = () => {
-    if (!isVoiceChatActive) return;
-    if (isMuted) {
-      unmuteInputAudio();
-    } else {
-      muteInputAudio();
-    }
+    if (!mic.active) return;
+    mic.onToggle();
   };
 
-  const micOn = !isMuted && isVoiceChatActive;
+  const micOn = !mic.muted && mic.active;
   const micBg = micOn ? '#3C4043' : '#EA4335';
   const micHover = micOn ? lightenHex('#3C4043', 0.1) : lightenHex('#EA4335', 0.1);
 
@@ -46,8 +47,8 @@ export function MeetSessionControlBar({
     <div className="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center justify-center gap-2 px-3 sm:gap-3 md:gap-3">
       <button
         type="button"
-        title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-        aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+        title={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
+        aria-label={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
         aria-pressed={micOn}
         style={{ backgroundColor: micBg }}
         onMouseEnter={(e) => {
@@ -59,7 +60,11 @@ export function MeetSessionControlBar({
         onClick={toggleMic}
         className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
       >
-        {isMuted ? <MicOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} /> : <Mic className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />}
+        {mic.muted ? (
+          <MicOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+        ) : (
+          <Mic className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+        )}
       </button>
 
       <button
