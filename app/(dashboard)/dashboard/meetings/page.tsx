@@ -22,17 +22,15 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { STT_LANGUAGE_LIST } from "@/app/lib/constants";
-import {
-  defaultFavoriteAvatars,
-  readFavoriteAvatars,
-} from "@/lib/avatars/favoritesStorage";
 import { useFavoriteAvatars } from "@/lib/avatars/useFavoriteAvatars";
 import { clientMeetingShareUrl } from "@/lib/meetings/clientMeetingShareUrl";
+import { parseLiveAvatarAvatarUuid } from "@/lib/livekit/liveAvatarAvatarId";
 
 type MeetingRow = {
   meetingId: string;
   title: string;
   avatarId: string;
+  liveAvatarAvatarUuid?: string;
   voiceId?: string;
   language: string;
   knowledgeBaseId: string;
@@ -47,7 +45,11 @@ type MeetingRow = {
 };
 
 type KnowledgeBase = { id: string; name: string };
-type MeetingAvatarRow = { avatar_id: string; name: string };
+type MeetingAvatarRow = {
+  avatar_id: string;
+  name: string;
+  liveAvatarAvatarUuid?: string;
+};
 type AvatarOption = MeetingAvatarRow | "CUSTOM";
 
 const inputDatetimeClass =
@@ -84,15 +86,19 @@ function MeetingFormModal({
   const meetingAvatars: MeetingAvatarRow[] = favorites.map((f) => ({
     avatar_id: f.id,
     name: f.name,
+    ...(f.liveAvatarAvatarUuid ? { liveAvatarAvatarUuid: f.liveAvatarAvatarUuid } : {}),
   }));
   const [title, setTitle] = useState("");
-  const [avatarId, setAvatarId] = useState(
-    () => defaultFavoriteAvatars()[0]?.id || "",
-  );
+  const [avatarId, setAvatarId] = useState("");
   const [avatarCustom, setAvatarCustom] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [language, setLanguage] = useState("en");
   const [knowledgeBaseId, setKnowledgeBaseId] = useState("");
+  const [liveAvatarAvatarUuid, setLiveAvatarAvatarUuid] = useState("");
+  const [uuidResolvedFrom, setUuidResolvedFrom] = useState<
+    "heygen" | "env_map" | null
+  >(null);
+  const [uuidLookupLoading, setUuidLookupLoading] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
   const [maxSessions, setMaxSessions] = useState("");
   const [isReusable, setIsReusable] = useState(false);
@@ -102,48 +108,146 @@ function MeetingFormModal({
 
   useEffect(() => {
     if (!open) return;
-    refresh();
-    const rows = readFavoriteAvatars().map((f) => ({
-      avatar_id: f.id,
-      name: f.name,
-    }));
+    let cancelled = false;
     setError(null);
-    if (initial) {
-      setTitle(initial.title);
-      const known = rows.find((a) => a.avatar_id === initial.avatarId);
-      if (known) {
-        setAvatarId(known.avatar_id);
-        setAvatarCustom("");
+    setUuidResolvedFrom(null);
+    void (async () => {
+      const favs = await refresh();
+      if (cancelled) return;
+      const rows = favs.map((f) => ({
+        avatar_id: f.id,
+        name: f.name,
+        ...(f.liveAvatarAvatarUuid
+          ? { liveAvatarAvatarUuid: f.liveAvatarAvatarUuid }
+          : {}),
+      }));
+      if (initial) {
+        setTitle(initial.title);
+        const known = rows.find((a) => a.avatar_id === initial.avatarId);
+        if (known) {
+          setAvatarId(known.avatar_id);
+          setAvatarCustom("");
+        } else {
+          setAvatarId(initial.avatarId);
+          setAvatarCustom(initial.avatarId);
+        }
+        setVoiceId(initial.voiceId || "");
+        setLanguage(initial.language);
+        setKnowledgeBaseId(initial.knowledgeBaseId);
+        setLiveAvatarAvatarUuid(initial.liveAvatarAvatarUuid || "");
+        setExpiresAt(initial.expiresAt ? initial.expiresAt.slice(0, 16) : "");
+        setMaxSessions(
+          initial.maxSessions != null ? String(initial.maxSessions) : "",
+        );
+        setIsReusable(initial.isReusable);
+        setInviteEmail("");
       } else {
-        setAvatarId(initial.avatarId);
-        setAvatarCustom(initial.avatarId);
+        setTitle("");
+        setAvatarId(rows[0]?.avatar_id || "");
+        setAvatarCustom("");
+        setVoiceId("");
+        setLanguage("en");
+        setKnowledgeBaseId(knowledgeBases[0]?.id || "");
+        setLiveAvatarAvatarUuid("");
+        setExpiresAt("");
+        setMaxSessions("");
+        setIsReusable(false);
+        setInviteEmail("");
       }
-      setVoiceId(initial.voiceId || "");
-      setLanguage(initial.language);
-      setKnowledgeBaseId(initial.knowledgeBaseId);
-      setExpiresAt(initial.expiresAt ? initial.expiresAt.slice(0, 16) : "");
-      setMaxSessions(
-        initial.maxSessions != null ? String(initial.maxSessions) : "",
-      );
-      setIsReusable(initial.isReusable);
-      setInviteEmail("");
-    } else {
-      setTitle("");
-      setAvatarId(rows[0]?.avatar_id || "");
-      setAvatarCustom("");
-      setVoiceId("");
-      setLanguage("en");
-      setKnowledgeBaseId(knowledgeBases[0]?.id || "");
-      setExpiresAt("");
-      setMaxSessions("");
-      setIsReusable(false);
-      setInviteEmail("");
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open, initial, knowledgeBases, refresh]);
 
   const resolvedAvatarId = meetingAvatars.some((a) => a.avatar_id === avatarId)
     ? avatarId
     : avatarCustom.trim() || avatarId;
+
+  useEffect(() => {
+    if (!open) return;
+    const id = resolvedAvatarId.trim();
+    if (!id) {
+      setLiveAvatarAvatarUuid("");
+      setUuidResolvedFrom(null);
+      setUuidLookupLoading(false);
+      return;
+    }
+
+    const direct = parseLiveAvatarAvatarUuid(id);
+    if (direct) {
+      setLiveAvatarAvatarUuid(direct);
+      setUuidResolvedFrom(null);
+      setUuidLookupLoading(false);
+      return;
+    }
+
+    if (
+      initial &&
+      initial.avatarId === id &&
+      initial.liveAvatarAvatarUuid &&
+      parseLiveAvatarAvatarUuid(initial.liveAvatarAvatarUuid)
+    ) {
+      setLiveAvatarAvatarUuid(parseLiveAvatarAvatarUuid(initial.liveAvatarAvatarUuid)!);
+      setUuidResolvedFrom(null);
+      setUuidLookupLoading(false);
+      return;
+    }
+
+    const favUuid = favorites.find((f) => f.id === id)?.liveAvatarAvatarUuid;
+    const fromFav = favUuid ? parseLiveAvatarAvatarUuid(favUuid) : null;
+    if (fromFav) {
+      setLiveAvatarAvatarUuid(fromFav);
+      setUuidResolvedFrom(null);
+      setUuidLookupLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setUuidLookupLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/avatars/${encodeURIComponent(id)}/details`);
+        const data = (await res.json()) as {
+          success?: boolean;
+          liveAvatarAvatarUuid?: string | null;
+          resolvedFrom?: string | null;
+        };
+        if (cancelled) return;
+        const parsed =
+          typeof data.liveAvatarAvatarUuid === "string"
+            ? parseLiveAvatarAvatarUuid(data.liveAvatarAvatarUuid)
+            : null;
+        setLiveAvatarAvatarUuid(parsed ?? "");
+        const rf = data.resolvedFrom;
+        setUuidResolvedFrom(
+          parsed && rf
+            ? rf === "env_map"
+              ? "env_map"
+              : "heygen"
+            : null,
+        );
+      } catch {
+        if (!cancelled) {
+          setLiveAvatarAvatarUuid("");
+          setUuidResolvedFrom(null);
+        }
+      } finally {
+        if (!cancelled) setUuidLookupLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    resolvedAvatarId,
+    initial?.meetingId,
+    initial?.avatarId,
+    initial?.liveAvatarAvatarUuid,
+    favorites,
+  ]);
 
   const submit = async () => {
     setSaving(true);
@@ -161,6 +265,12 @@ function MeetingFormModal({
         knowledgeBaseId,
         isReusable,
       };
+      const effectiveLiveUuid =
+        parseLiveAvatarAvatarUuid(liveAvatarAvatarUuid.trim()) ??
+        parseLiveAvatarAvatarUuid(resolvedAvatarId.trim());
+      if (effectiveLiveUuid) {
+        payload.liveAvatarAvatarUuid = effectiveLiveUuid;
+      }
       if (initial) {
         payload.voiceId = voiceId.trim() || null;
       } else if (voiceId.trim()) {
@@ -246,6 +356,11 @@ function MeetingFormModal({
             </label>
             <Select<AvatarOption>
               options={[...meetingAvatars, "CUSTOM"]}
+              getOptionKey={(opt, index) =>
+                opt === "CUSTOM"
+                  ? "__avatar_custom__"
+                  : `${(opt as MeetingAvatarRow).avatar_id}-${index}`
+              }
               placeholder="Select avatar"
               value={
                 meetingAvatars.some((a) => a.avatar_id === avatarId)
@@ -312,8 +427,54 @@ function MeetingFormModal({
               >
                 Gallery
               </Link>
+              . The LiveAvatar UUID for LiveKit is loaded from HeyGen when you pick an avatar.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2.5">
+            <p className="text-[13px] font-medium text-slate-600">LiveKit / LiveAvatar UUID</p>
+            <p className="mt-1 text-xs text-tertiary">
+              Resolved from HeyGen (details API + deep scan). Optional per-avatar map:{" "}
+              <code className="rounded bg-white px-1 text-[11px] text-slate-700">
+                HEYGEN_LIVEAVATAR_UUID_MAP
+              </code>{" "}
+              (JSON in server env). If still missing, LiveKit can use{" "}
+              <code className="rounded bg-white px-1 text-[11px] text-slate-700">
+                LIVEKIT_FALLBACK_AVATAR_UUID
+              </code>{" "}
+              or{" "}
+              <code className="rounded bg-white px-1 text-[11px] text-slate-700">
+                LIVEAVATAR_AVATAR_ID
+              </code>
               .
             </p>
+            <div className="mt-2 flex min-h-[1.25rem] flex-col gap-1 text-xs">
+              <div className="flex min-h-[1.25rem] items-center gap-2">
+                {uuidLookupLoading ? (
+                  <>
+                    <Loader2
+                      className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400"
+                      aria-hidden
+                    />
+                    <span className="text-tertiary">Fetching from HeyGen…</span>
+                  </>
+                ) : liveAvatarAvatarUuid.trim() ? (
+                  <code className="break-all font-mono text-[11px] text-slate-800">
+                    {parseLiveAvatarAvatarUuid(liveAvatarAvatarUuid.trim()) ??
+                      liveAvatarAvatarUuid.trim()}
+                  </code>
+                ) : (
+                  <span className="text-amber-800">
+                    No UUID returned for this HeyGen avatar — set HEYGEN_LIVEAVATAR_UUID_MAP or use
+                    env fallback on the agent.
+                  </span>
+                )}
+              </div>
+              {uuidResolvedFrom === "env_map" && liveAvatarAvatarUuid.trim() ? (
+                <p className="text-emerald-800">
+                  Source: server env map <code className="text-[11px]">HEYGEN_LIVEAVATAR_UUID_MAP</code>
+                </p>
+              ) : null}
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-slate-600">

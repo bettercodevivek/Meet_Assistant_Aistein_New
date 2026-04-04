@@ -6,6 +6,8 @@ import KnowledgeBase from '@/lib/db/models/KnowledgeBase';
 import { getAuthUser } from '@/lib/auth/middleware';
 import { isMeetingValidForJoin } from '@/lib/meetings/isMeetingValid';
 import { publicAppOrigin, meetingShareUrl } from '@/lib/meetings/publicOrigin';
+import { authUserObjectId } from '@/lib/auth/userObjectId';
+import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
 
 function unauthorized() {
   return NextResponse.json(
@@ -57,6 +59,7 @@ export async function GET(
         meeting: {
           title: meeting.title,
           avatarId: meeting.avatarId,
+          liveAvatarAvatarUuid: meeting.liveAvatarAvatarUuid,
           status: meeting.status,
           isValid,
         },
@@ -74,6 +77,7 @@ export async function GET(
         shareUrl,
         title: meeting.title,
         avatarId: meeting.avatarId,
+        liveAvatarAvatarUuid: meeting.liveAvatarAvatarUuid,
         voiceId: meeting.voiceId,
         language: meeting.language,
         knowledgeBaseId: kb && typeof kb === 'object' && '_id' in kb ? String(kb._id) : String(meeting.knowledgeBaseId),
@@ -142,6 +146,7 @@ export async function PATCH(
       'voiceId' in body ||
       'language' in body ||
       'knowledgeBaseId' in body ||
+      'liveAvatarAvatarUuid' in body ||
       'maxSessions' in body ||
       'expiresAt' in body ||
       'isReusable' in body ||
@@ -164,6 +169,10 @@ export async function PATCH(
     }
     if ('avatarId' in body && typeof body.avatarId === 'string' && body.avatarId.trim()) {
       meeting.avatarId = body.avatarId.trim();
+      if (!('liveAvatarAvatarUuid' in body)) {
+        const parsedAvatar = parseLiveAvatarAvatarUuid(meeting.avatarId);
+        if (parsedAvatar) meeting.liveAvatarAvatarUuid = parsedAvatar;
+      }
     }
     if ('voiceId' in body) {
       if (body.voiceId === '' || body.voiceId === null) {
@@ -175,10 +184,32 @@ export async function PATCH(
     if ('language' in body && typeof body.language === 'string' && body.language.trim()) {
       meeting.language = body.language.trim();
     }
+    if ('liveAvatarAvatarUuid' in body) {
+      if (body.liveAvatarAvatarUuid === '' || body.liveAvatarAvatarUuid === null) {
+        meeting.liveAvatarAvatarUuid = undefined;
+      } else if (typeof body.liveAvatarAvatarUuid === 'string') {
+        const parsed = parseLiveAvatarAvatarUuid(body.liveAvatarAvatarUuid.trim());
+        if (!parsed) {
+          return NextResponse.json(
+            { success: false, message: 'liveAvatarAvatarUuid must be a valid UUID' },
+            { status: 400 },
+          );
+        }
+        meeting.liveAvatarAvatarUuid = parsed;
+      }
+    }
+
     if (body.knowledgeBaseId) {
+      const ownerOid = authUserObjectId(auth.userId);
+      if (!ownerOid) {
+        return NextResponse.json(
+          { success: false, message: 'Invalid session' },
+          { status: 401 },
+        );
+      }
       const kb = await KnowledgeBase.findOne({
         _id: body.knowledgeBaseId,
-        userId: auth.userId,
+        userId: ownerOid,
       });
       if (!kb) {
         return NextResponse.json(
@@ -240,6 +271,7 @@ export async function PATCH(
         shareUrl,
         title: meeting.title,
         avatarId: meeting.avatarId,
+        liveAvatarAvatarUuid: meeting.liveAvatarAvatarUuid,
         voiceId: meeting.voiceId,
         language: meeting.language,
         knowledgeBaseId: kb && typeof kb === 'object' && '_id' in kb ? String(kb._id) : String(meeting.knowledgeBaseId),

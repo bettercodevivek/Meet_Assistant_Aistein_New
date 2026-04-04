@@ -31,6 +31,9 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
 
   const guestTokenRef = useRef<string | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  cameraStreamRef.current = cameraStream;
   const sessionStartRef = useRef<number>(0);
   const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const lastGuestActivityRef = useRef<number>(Date.now());
@@ -93,8 +96,26 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
   useEffect(() => {
     return () => {
       micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      cameraStream?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [cameraStream]);
+
+  const toggleCamera = useCallback(async () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      setCameraStream(null);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      setCameraStream(stream);
+    } catch {
+      console.error('Camera access was denied or unavailable.');
+    }
+  }, [cameraStream]);
 
   const startSession = async () => {
     if (!meetingSlug || !guestName.trim()) return;
@@ -195,39 +216,58 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
 
   const handleEndCall = async () => {
     const durationMs = Math.max(0, Date.now() - sessionStartRef.current);
-    let canRejoin = false;
-
-    try {
-      await saveChainRef.current;
-    } catch {
-      /* chained saves already log */
-    }
-
     const cid = conversationId;
     const token = guestTokenRef.current;
-    if (cid && token) {
-      try {
-        const res = await fetch(`/api/conversations/${cid}/end`, {
-          method: 'POST',
-          headers: { 'x-guest-token': token },
-        });
-        if (!res.ok) {
-          const errBody = await res.text();
-          console.error('End session failed:', res.status, errBody);
-        }
-      } catch (e) {
-        console.error('End session:', e);
-      }
+
+    // Do not block leaving on a stuck message save (chain never resolves).
+    try {
+      await Promise.race([
+        saveChainRef.current.catch(() => {}),
+        new Promise<void>((r) => {
+          window.setTimeout(r, 5000);
+        }),
+      ]);
+    } catch {
+      /* ignore */
     }
+
     guestTokenRef.current = null;
-    setConversation(null);
-    setConversationId('');
-    canRejoin = await resolveCanRejoin();
+
+    cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
+    setCameraStream(null);
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
     micStreamRef.current = null;
     setMicStatus('idle');
+    setConversation(null);
+    setConversationId('');
+
+    let canRejoin = false;
+    try {
+      canRejoin = await resolveCanRejoin();
+    } catch {
+      canRejoin = false;
+    }
+
     setLeftMeta({ durationMs, canRejoin });
     setPhase('left');
+
+    // Server finalization can take a long time (poll for LiveKit transcript + OpenAI summary).
+    // Tear down UI first; complete the conversation in the background.
+    if (cid && token) {
+      void fetch(`/api/conversations/${cid}/end`, {
+        method: 'POST',
+        headers: { 'x-guest-token': token },
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errBody = await res.text();
+            console.error('End session failed:', res.status, errBody);
+          }
+        })
+        .catch((e) => {
+          console.error('End session:', e);
+        });
+    }
   };
 
   handleEndCallRef.current = handleEndCall;
@@ -335,7 +375,11 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
       <MeetSessionLive
         conversation={conversation}
         guestName={guestName}
+        guestToken={guestTokenRef.current ?? ''}
         micStream={micStreamRef.current}
+        cameraStream={cameraStream}
+        cameraOn={Boolean(cameraStream)}
+        onToggleCamera={() => void toggleCamera()}
         onMessageSent={handleMessageSent}
         onEndCall={() => void handleEndCall()}
         onRecoveryTimeout={() => void handleEndCallRef.current()}

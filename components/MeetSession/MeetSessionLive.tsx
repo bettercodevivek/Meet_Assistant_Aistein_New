@@ -1,51 +1,56 @@
 'use client';
 
 import type { MutableRefObject } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { StreamingAvatarProvider, type AvatarStreamLifecycleHandlers } from '@/components/logic';
-import { MeetConversationAvatar, type LiveTranscriptPayload } from '@/components/InteractiveAvatar';
-import { useVoiceChat } from '@/components/logic/useVoiceChat';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+
+import type { AvatarStreamLifecycleHandlers } from '@/components/logic';
 import type { SessionConversation } from '@/components/meeting/sessionTypes';
+import { MeetLiveKitRoom, type MeetMicControls } from '@/components/MeetSession/MeetLiveKitRoom';
 import { MeetSessionTopBar } from './MeetSessionTopBar';
 import { MeetSessionControlBar } from './MeetSessionControlBar';
 import { MeetSessionChatPanel, type LiveMessage } from './MeetSessionChatPanel';
 import { MeetSessionSelfView } from './MeetSessionSelfView';
 import { MeetSessionSettingsModal } from './MeetSessionSettingsModal';
-import { Loader2 } from 'lucide-react';
-import { MeetLiveCaptionsBar } from './MeetLiveCaptionsBar';
 
 function MeetSessionRoomInner({
   conversation,
   guestName,
+  guestToken,
   micStream,
-  onMessageSent,
+  cameraStream,
+  cameraOn,
+  onToggleCamera,
   onEndCall,
   streamLifecycleRef,
   onRecoveryTimeout,
-  onGuestActivity,
 }: {
   conversation: SessionConversation;
   guestName: string;
+  guestToken: string;
   micStream: MediaStream | null;
-  onMessageSent: (message: string, role: 'user' | 'assistant') => void;
+  cameraStream: MediaStream | null;
+  cameraOn: boolean;
+  onToggleCamera: () => void;
   onEndCall: () => void;
   streamLifecycleRef: MutableRefObject<AvatarStreamLifecycleHandlers>;
   onRecoveryTimeout?: () => void;
-  onGuestActivity?: () => void;
 }) {
   const [messages, setMessages] = useState<LiveMessage[]>(() => conversation.messages || []);
   const [chatOpen, setChatOpen] = useState(false);
-  const [captionsOn, setCaptionsOn] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
   const [sessionStartedAt] = useState(() => Date.now());
-  const [liveUserDraft, setLiveUserDraft] = useState('');
-  const [liveAvatarDraft, setLiveAvatarDraft] = useState('');
   const [recoveringStream, setRecoveringStream] = useState(false);
 
-  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [micControls, setMicControls] = useState<MeetMicControls>(() => ({
+    muted: false,
+    active: false,
+    toggle: () => {},
+  }));
 
-  const { isMuted } = useVoiceChat();
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const guestLabel = guestName.trim() || 'Guest';
   const hostLabel = 'Avatar';
@@ -85,85 +90,37 @@ function MeetSessionRoomInner({
     setMessages(conversation.messages || []);
   }, [conversation.id, conversation.messages]);
 
-  const onLiveTranscript = useCallback(
-    (p: LiveTranscriptPayload) => {
-      if (p.role === 'user') {
-        setLiveUserDraft(p.interim ? p.text : '');
-        if (p.text.trim().length > 0) {
-          onGuestActivity?.();
-        }
-      } else {
-        setLiveAvatarDraft(p.interim ? p.text : '');
-      }
-    },
-    [onGuestActivity],
+  const micForBar = useMemo(
+    () => ({
+      muted: micControls.muted,
+      active: micControls.active,
+      onToggle: micControls.toggle,
+    }),
+    [micControls],
   );
-
-  const pushAssistant = useCallback(
-    (text: string) => {
-      onMessageSent(text, 'assistant');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-a`,
-          role: 'assistant' as const,
-          content: text,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    },
-    [onMessageSent],
-  );
-
-  const pushUser = useCallback(
-    (text: string) => {
-      onGuestActivity?.();
-      onMessageSent(text, 'user');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-u`,
-          role: 'user' as const,
-          content: text,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    },
-    [onMessageSent, onGuestActivity],
-  );
-
-  const startedAt = sessionStartedAt;
-
-  const showLiveCaptionSlot =
-    captionsOn && (liveUserDraft.trim().length > 0 || liveAvatarDraft.trim().length > 0);
 
   return (
     <div className="fixed inset-0 bg-[#202124] text-white flex flex-col">
-      <MeetSessionTopBar title={conversation.title} sessionStartedAt={startedAt} />
+      <MeetSessionTopBar title={conversation.title} sessionStartedAt={sessionStartedAt} />
 
       <div className="flex-1 min-h-0 pt-14 relative">
         <div className="absolute inset-0 flex flex-col">
           <div className="flex-1 min-h-0 relative flex items-stretch justify-center">
-            <MeetConversationAvatar
-              variant="meet"
+            <MeetLiveKitRoom
               conversation={conversation}
-              onMessageReceived={pushAssistant}
-              onUserMessage={pushUser}
-              onLiveTranscript={onLiveTranscript}
-              onGuestVoiceActivity={onGuestActivity}
-              meetFooterOverlay={
-                showLiveCaptionSlot ? (
-                  <MeetLiveCaptionsBar
-                    guestLabel={guestLabel}
-                    hostLabel={hostLabel}
-                    userText={liveUserDraft}
-                    avatarText={liveAvatarDraft}
-                  />
-                ) : null
-              }
+              guestName={guestName}
+              guestToken={guestToken}
+              micStream={micStream}
+              streamLifecycleRef={streamLifecycleRef}
+              setMicControls={setMicControls}
             />
 
-            <MeetSessionSelfView audioStream={micStream} guestName={guestName} isMuted={isMuted} />
+            <MeetSessionSelfView
+              audioStream={micStream}
+              cameraStream={cameraStream}
+              guestName={guestName}
+              isMuted={micControls.muted}
+            />
 
             {recoveringStream && (
               <div className="pointer-events-none absolute inset-0 z-[40] flex items-center justify-center bg-black/35">
@@ -185,8 +142,8 @@ function MeetSessionRoomInner({
           guestLabel={guestLabel}
           hostLabel={hostLabel}
           messages={messages}
-          liveUserDraft={liveUserDraft}
-          liveAvatarDraft={liveAvatarDraft}
+          liveUserDraft=""
+          liveAvatarDraft=""
         />
       </div>
 
@@ -197,6 +154,9 @@ function MeetSessionRoomInner({
         onCaptionsToggle={() => setCaptionsOn((c) => !c)}
         onSettingsOpen={() => setSettingsOpen(true)}
         onEndCall={() => setEndConfirm(true)}
+        mic={micForBar}
+        cameraOn={cameraOn}
+        onCameraToggle={onToggleCamera}
       />
 
       <MeetSessionSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -232,23 +192,26 @@ function MeetSessionRoomInner({
   );
 }
 
-export function MeetSessionLive(props: {
+export function MeetSessionLive({
+  onMessageSent: _persistMessages,
+  onGuestActivity: _onGuestActivity,
+  ...inner
+}: {
   conversation: SessionConversation;
   guestName: string;
+  guestToken: string;
   micStream: MediaStream | null;
+  cameraStream: MediaStream | null;
+  cameraOn: boolean;
+  onToggleCamera: () => void;
   onMessageSent: (message: string, role: 'user' | 'assistant') => void;
   onEndCall: () => void;
   onRecoveryTimeout?: () => void;
   onGuestActivity?: () => void;
 }) {
   const streamLifecycleRef = useRef<AvatarStreamLifecycleHandlers>({});
+  void _persistMessages;
+  void _onGuestActivity;
 
-  return (
-    <StreamingAvatarProvider
-      basePath={process.env.NEXT_PUBLIC_BASE_API_URL}
-      streamLifecycleRef={streamLifecycleRef}
-    >
-      <MeetSessionRoomInner {...props} streamLifecycleRef={streamLifecycleRef} />
-    </StreamingAvatarProvider>
-  );
+  return <MeetSessionRoomInner {...inner} streamLifecycleRef={streamLifecycleRef} />;
 }

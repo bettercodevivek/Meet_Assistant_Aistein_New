@@ -2,14 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db/mongodb';
 import KnowledgeBase from '@/lib/db/models/KnowledgeBase';
 import { requireAuth } from '@/lib/auth/middleware';
+import { authUserObjectId } from '@/lib/auth/userObjectId';
 
 // GET all knowledge bases
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
     await connectDB();
-    
-    const knowledgeBases = await KnowledgeBase.find({ userId: user.userId })
+
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
+    const knowledgeBases = await KnowledgeBase.find({ userId: userOid })
       .sort({ createdAt: -1 });
     
     return NextResponse.json({
@@ -46,18 +55,28 @@ export async function POST(request: NextRequest) {
     await connectDB();
     
     const { name, prompt } = await request.json();
-    
-    if (!name || !prompt) {
+
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
+    const nameTrim = typeof name === 'string' ? name.trim() : '';
+    const promptTrim = typeof prompt === 'string' ? prompt.trim() : '';
+    if (!nameTrim || !promptTrim) {
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
         { status: 400 }
       );
     }
-    
+
     const knowledgeBase = await KnowledgeBase.create({
-      userId: user.userId,
-      name,
-      prompt,
+      userId: userOid,
+      name: nameTrim,
+      prompt: promptTrim,
     });
     
     return NextResponse.json({

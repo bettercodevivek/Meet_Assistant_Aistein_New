@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db/mongodb';
 import KnowledgeBase from '@/lib/db/models/KnowledgeBase';
 import { requireAuth } from '@/lib/auth/middleware';
+import { authUserObjectId } from '@/lib/auth/userObjectId';
 
 // GET single knowledge base
 export async function GET(
@@ -13,10 +14,18 @@ export async function GET(
     await connectDB();
     
     const { id } = await params;
-    
+
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
     const knowledgeBase = await KnowledgeBase.findOne({
       _id: id,
-      userId: user.userId,
+      userId: userOid,
     });
     
     if (!knowledgeBase) {
@@ -64,15 +73,25 @@ export async function PUT(
     
     const { id } = await params;
     const { name, prompt } = await request.json();
-    
+
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
+    const nameTrim = typeof name === 'string' ? name.trim() : '';
+    const promptTrim = typeof prompt === 'string' ? prompt.trim() : '';
     const knowledgeBase = await KnowledgeBase.findOneAndUpdate(
-      { _id: id, userId: user.userId },
+      { _id: id, userId: userOid },
       {
-        ...(name && { name }),
-        ...(prompt && { prompt }),
+        ...(nameTrim ? { name: nameTrim } : {}),
+        ...(promptTrim ? { prompt: promptTrim } : {}),
         updatedAt: new Date(),
       },
-      { new: true }
+      { new: true },
     );
     
     if (!knowledgeBase) {
@@ -119,10 +138,18 @@ export async function DELETE(
     await connectDB();
     
     const { id } = await params;
-    
+
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
     const knowledgeBase = await KnowledgeBase.findOneAndDelete({
       _id: id,
-      userId: user.userId,
+      userId: userOid,
     });
     
     if (!knowledgeBase) {

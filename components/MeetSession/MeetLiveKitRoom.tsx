@@ -1,0 +1,250 @@
+'use client';
+
+import type { MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ConnectionState,
+  Room,
+  RoomEvent,
+  Track,
+  type RemoteParticipant,
+  type RemoteTrack,
+  type RemoteTrackPublication,
+} from 'livekit-client';
+
+import type { AvatarStreamLifecycleHandlers } from '@/components/logic';
+import type { SessionConversation } from '@/components/meeting/sessionTypes';
+
+export type MeetMicControls = {
+  muted: boolean;
+  toggle: () => void;
+  active: boolean;
+};
+
+function attachVideo(track: RemoteTrack, el: HTMLVideoElement | null) {
+  if (!el) return;
+  track.attach(el);
+}
+
+function attachAudio(track: RemoteTrack, el: HTMLAudioElement | null) {
+  if (!el) return;
+  track.attach(el);
+  void el.play().catch(() => {});
+}
+
+function isLikelyAgentParticipant(p: RemoteParticipant): boolean {
+  if (p.isAgent) return true;
+  const id = (p.identity || '').toLowerCase();
+  return id.includes('agent') || id.startsWith('lk-agent');
+}
+
+export function MeetLiveKitRoom({
+  conversation,
+  guestToken,
+  guestName,
+  micStream,
+  streamLifecycleRef,
+  setMicControls,
+}: {
+  conversation: SessionConversation;
+  guestToken: string;
+  guestName: string;
+  micStream: MediaStream | null;
+  streamLifecycleRef: MutableRefObject<AvatarStreamLifecycleHandlers>;
+  setMicControls: (c: MeetMicControls) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const roomRef = useRef<Room | null>(null);
+  const micStreamRef = useRef(micStream);
+  micStreamRef.current = micStream;
+
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'connecting' | 'live' | 'failed'>('connecting');
+  const micMutedRef = useRef(false);
+
+  const pushMicControls = useCallback(
+    (active: boolean) => {
+      setMicControls({
+        active,
+        muted: micMutedRef.current,
+        toggle: () => {
+          micMutedRef.current = !micMutedRef.current;
+          void roomRef.current?.localParticipant.setMicrophoneEnabled(
+            !micMutedRef.current,
+          );
+          pushMicControls(active);
+        },
+      });
+    },
+    [setMicControls],
+  );
+
+  const bindRemoteTrack = useCallback(
+    (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (!isLikelyAgentParticipant(participant)) return;
+      if (track.kind === Track.Kind.Video) {
+        attachVideo(track, videoRef.current);
+      }
+      if (track.kind === Track.Kind.Audio) {
+        attachAudio(track, audioRef.current);
+      }
+    },
+    [],
+  );
+
+  const publishMic = useCallback(async (room: Room) => {
+    const stream = micStreamRef.current;
+    const track = stream?.getAudioTracks()[0];
+    if (!track) return;
+    const existing = Array.from(room.localParticipant.audioTrackPublications.values()).filter(
+      (p) => p.source === Track.Source.Microphone,
+    );
+    for (const pub of existing) {
+      if (pub.track) {
+        await room.localParticipant.unpublishTrack(pub.track);
+      }
+    }
+    const pub = await room.localParticipant.publishTrack(track, {
+      source: Track.Source.Microphone,
+    });
+    if (micMutedRef.current) {
+      await pub.mute();
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+    });
+    roomRef.current = room;
+
+    const onDisconnected = () => {
+      streamLifecycleRef.current.onStreamDisconnected?.();
+    };
+    const onReconnected = () => {
+      streamLifecycleRef.current.onStreamConnected?.();
+    };
+
+    room.on(RoomEvent.Disconnected, onDisconnected);
+    room.on(RoomEvent.Reconnected, onReconnected);
+    room.on(RoomEvent.TrackSubscribed, bindRemoteTrack);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/conversations/${conversation.id}/livekit-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-guest-token': guestToken,
+          },
+          body: JSON.stringify({ guestName: guestName.trim() || 'Guest' }),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          message?: string;
+          serverUrl?: string;
+          token?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok || !data.success || !data.serverUrl || !data.token) {
+          setError(data.message || 'Could not start LiveKit session');
+          setPhase('failed');
+          pushMicControls(false);
+          return;
+        }
+
+        await room.connect(data.serverUrl, data.token);
+        if (cancelled) {
+          room.disconnect();
+          return;
+        }
+
+        await publishMic(room);
+        pushMicControls(true);
+        streamLifecycleRef.current.onStreamConnected?.();
+
+        for (const p of Array.from(room.remoteParticipants.values())) {
+          if (!isLikelyAgentParticipant(p)) continue;
+          for (const pub of Array.from(p.trackPublications.values())) {
+            if (pub.track) {
+              bindRemoteTrack(pub.track as RemoteTrack, pub, p);
+            }
+          }
+        }
+
+        setPhase('live');
+      } catch (e) {
+        if (!cancelled) {
+          console.error(e);
+          setError(e instanceof Error ? e.message : 'LiveKit connection failed');
+          setPhase('failed');
+          pushMicControls(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      room.off(RoomEvent.Disconnected, onDisconnected);
+      room.off(RoomEvent.Reconnected, onReconnected);
+      room.off(RoomEvent.TrackSubscribed, bindRemoteTrack);
+      room.disconnect();
+      roomRef.current = null;
+      pushMicControls(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.srcObject = null;
+      }
+    };
+  }, [
+    conversation.id,
+    guestToken,
+    guestName,
+    bindRemoteTrack,
+    publishMic,
+    streamLifecycleRef,
+    pushMicControls,
+  ]);
+
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room || room.state !== ConnectionState.Connected) return;
+    const hasAudio = Boolean(micStream?.getAudioTracks()[0]);
+    if (!hasAudio) return;
+    void publishMic(room);
+  }, [micStream, publishMic]);
+
+  if (error || phase === 'failed') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-lg font-medium text-white">Couldn&apos;t join LiveKit</p>
+        <p className="max-w-md text-sm text-[#9AA0A6]">{error}</p>
+        <p className="max-w-md text-xs text-[#9AA0A6]">
+          Ensure LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET are set on the server and the
+          Liveavatar worker is running with the same project.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex h-full w-full items-center justify-center bg-black">
+      {phase === 'connecting' ? (
+        <p className="text-sm text-[#9AA0A6]">Connecting to session…</p>
+      ) : null}
+      <video
+        ref={videoRef}
+        className="max-h-full max-w-full object-contain"
+        playsInline
+        autoPlay
+        muted={false}
+      />
+      <audio ref={audioRef} className="hidden" autoPlay />
+    </div>
+  );
+}

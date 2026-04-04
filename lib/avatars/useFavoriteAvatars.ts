@@ -2,41 +2,67 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  defaultFavoriteAvatars,
-  FAVORITE_AVATARS_STORAGE_KEY,
-  readFavoriteAvatars,
-  writeFavoriteAvatars,
-  type FavoriteAvatar,
-} from "@/lib/avatars/favoritesStorage";
+import type { FavoriteAvatar } from "@/lib/avatars/favoritesStorage";
+
+async function fetchFavoritesFromApi(): Promise<FavoriteAvatar[]> {
+  const res = await fetch("/api/me/favorite-avatars", {
+    credentials: "include",
+  });
+  const data = (await res.json()) as {
+    success?: boolean;
+    favorites?: FavoriteAvatar[];
+  };
+  if (!res.ok || !data.success || !Array.isArray(data.favorites)) {
+    return [];
+  }
+  return data.favorites;
+}
 
 export function useFavoriteAvatars() {
-  const [favorites, setFavorites] = useState<FavoriteAvatar[]>(() =>
-    defaultFavoriteAvatars(),
+  const [favorites, setFavorites] = useState<FavoriteAvatar[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const refresh = useCallback(async (): Promise<FavoriteAvatar[]> => {
+    try {
+      const list = await fetchFavoritesFromApi();
+      setFavorites(list);
+      return list;
+    } catch {
+      setFavorites([]);
+      return [];
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  const setFavoritesAndPersist = useCallback(
+    async (next: FavoriteAvatar[]): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/me/favorite-avatars", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ favorites: next }),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          favorites?: FavoriteAvatar[];
+        };
+        if (res.ok && data.success && Array.isArray(data.favorites)) {
+          setFavorites(data.favorites);
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [],
   );
 
-  const refresh = useCallback(() => {
-    setFavorites(readFavoriteAvatars());
-  }, []);
-
-  const setFavoritesAndPersist = useCallback((next: FavoriteAvatar[]) => {
-    writeFavoriteAvatars(next);
-    setFavorites(readFavoriteAvatars());
-  }, []);
-
   useEffect(() => {
-    setFavorites(readFavoriteAvatars());
-  }, []);
+    void refresh();
+  }, [refresh]);
 
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === FAVORITE_AVATARS_STORAGE_KEY || e.key === null) {
-        setFavorites(readFavoriteAvatars());
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  return { favorites, refresh, setFavoritesAndPersist };
+  return { favorites, refresh, setFavoritesAndPersist, loaded };
 }

@@ -3,7 +3,7 @@ import connectDB from "@/lib/db/mongodb";
 import Conversation from "@/lib/db/models/Conversation";
 import Message from "@/lib/db/models/Message";
 import { findConversationWithAccess } from "@/lib/conversations/accessConversation";
-import { classifyAppointmentBooked } from "@/lib/utils/appointmentFromSummary";
+import { analyzeAppointmentFromSummary } from "@/lib/utils/appointmentFromSummary";
 import { generateConversationSummary } from "@/lib/utils/summaryGenerator";
 
 // POST — generate AI summary and persist on conversation (requires OPENAI_API_KEY on server)
@@ -48,18 +48,27 @@ export async function POST(
       })),
     );
 
-    const booked = await classifyAppointmentBooked(summary);
+    const appt = await analyzeAppointmentFromSummary(summary);
     const patch: Record<string, unknown> = { conversationSummary: summary };
-    if (booked !== null) {
-      patch.appointmentBooked = booked;
+    if (appt.appointmentBooked !== null) {
+      patch.appointmentBooked = appt.appointmentBooked;
       patch.appointmentCheckedAt = new Date();
+    }
+    if (appt.appointmentBooked === true) {
+      if (appt.appointmentAt) patch.appointmentAt = appt.appointmentAt;
+      if (appt.appointmentDetails) patch.appointmentDetails = appt.appointmentDetails;
+    } else if (appt.appointmentBooked === false) {
+      patch.appointmentAt = null;
+      patch.appointmentDetails = null;
     }
     await Conversation.findByIdAndUpdate(id, { $set: patch });
 
     return NextResponse.json({
       success: true,
       summary,
-      appointmentBooked: booked,
+      appointmentBooked: appt.appointmentBooked,
+      appointmentAt: appt.appointmentAt?.toISOString() ?? null,
+      appointmentDetails: appt.appointmentDetails,
     });
   } catch (error) {
     console.error("Generate summary error:", error);

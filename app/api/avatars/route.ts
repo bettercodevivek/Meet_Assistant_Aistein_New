@@ -1,26 +1,40 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
-
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuth } from "@/lib/auth/middleware";
-import type { HeyGenAvatarCatalogItem } from "@/lib/avatars/types";
+import { loadHeygenAvatarCatalog, resolveHeygenApiBaseUrl } from "@/lib/avatars/fetchHeygenCatalog";
+
+const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY;
 
 export async function GET(request: NextRequest) {
   try {
     requireAuth(request);
-    const filePath = join(process.cwd(), "avatars", "data.json");
-    const raw = await readFile(filePath, "utf-8");
-    const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) {
+
+    if (!HEYGEN_API_KEY?.trim()) {
       return NextResponse.json(
-        { success: false, message: "Invalid avatar catalog" },
+        { success: false, message: "HEYGEN_API_KEY is not configured" },
         { status: 500 },
       );
     }
+
+    const base = resolveHeygenApiBaseUrl();
+    const result = await loadHeygenAvatarCatalog(HEYGEN_API_KEY.trim());
+
+    if (!result.ok) {
+      console.error("[api/avatars]", result.message);
+      return NextResponse.json(
+        {
+          success: false,
+          message: result.message,
+          hint: `Using HeyGen base: ${base}. Set HEYGEN_API_BASE_URL or NEXT_PUBLIC_BASE_API_URL if wrong.`,
+        },
+        { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      avatars: data as HeyGenAvatarCatalogItem[],
+      avatars: result.avatars,
+      source: result.source,
     });
   } catch (error) {
     console.error("Get avatars catalog error:", error);

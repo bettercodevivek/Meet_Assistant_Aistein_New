@@ -132,6 +132,10 @@ export async function POST(
       status: 'active',
     });
 
+    await Meeting.findByIdAndUpdate(meeting._id, {
+      $set: { status: 'active' },
+    });
+
     return NextResponse.json({
       success: true,
       reconnect: false,

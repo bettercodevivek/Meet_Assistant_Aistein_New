@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db/mongodb";
 import Conversation from "@/lib/db/models/Conversation";
 import { requireAdmin } from "@/lib/auth/adminMiddleware";
-import { classifyAppointmentBooked } from "@/lib/utils/appointmentFromSummary";
+import { analyzeAppointmentFromSummary } from "@/lib/utils/appointmentFromSummary";
 
 function adminError(error: unknown) {
   if (error instanceof Error && error.message === "Admin access required") {
@@ -71,17 +71,23 @@ export async function POST(request: NextRequest) {
         typeof doc.conversationSummary === "string"
           ? doc.conversationSummary
           : "";
-      const booked = await classifyAppointmentBooked(summary);
-      if (booked === null) {
+      const appt = await analyzeAppointmentFromSummary(summary);
+      if (appt.appointmentBooked === null) {
         skipped += 1;
         continue;
       }
-      await Conversation.updateOne(
-        { _id: id },
-        {
-          $set: { appointmentBooked: booked, appointmentCheckedAt: new Date() },
-        },
-      );
+      const set: Record<string, unknown> = {
+        appointmentBooked: appt.appointmentBooked,
+        appointmentCheckedAt: new Date(),
+      };
+      if (appt.appointmentBooked === true) {
+        if (appt.appointmentAt) set.appointmentAt = appt.appointmentAt;
+        if (appt.appointmentDetails) set.appointmentDetails = appt.appointmentDetails;
+      } else {
+        set.appointmentAt = null;
+        set.appointmentDetails = null;
+      }
+      await Conversation.updateOne({ _id: id }, { $set: set });
       updated += 1;
     }
 
