@@ -27,12 +27,18 @@ export type MeetLiveKitSessionResult = {
  * Avatar / voice / language are included in dispatch metadata so the agent uses the same
  * values as the Next.js conversation even if MongoDB URI database names differ.
  */
+const MAX_KB_METADATA_CHARS = 28_000;
+
 export async function createMeetLiveKitSession(options: {
   conversationId: string;
   guestName: string;
   avatarId?: string;
+  /** Resolved LiveAvatar UUID (meeting override or parsed avatarId). */
+  liveAvatarAvatarUuid?: string | null;
   voiceId?: string | null;
   language?: string | null;
+  /** Injected into agent job metadata so the worker uses the same KB without DB drift. */
+  knowledgeBasePrompt?: string | null;
 }): Promise<MeetLiveKitSessionResult> {
   const httpUrl = livekitHttpUrl();
   const wsUrl = livekitWsUrl();
@@ -44,17 +50,27 @@ export async function createMeetLiveKitSession(options: {
     );
   }
 
-  const { conversationId, guestName, avatarId, voiceId, language } = options;
+  const {
+    conversationId,
+    guestName,
+    avatarId,
+    liveAvatarAvatarUuid,
+    voiceId,
+    language,
+    knowledgeBasePrompt,
+  } = options;
   const roomName = meetRoomNameForConversation(conversationId);
 
   const metaPayload: Record<string, string> = { conversationId };
   const aidRaw = avatarId?.trim();
-  const aid = parseLiveAvatarAvatarUuid(aidRaw ?? null);
+  const aid =
+    parseLiveAvatarAvatarUuid(liveAvatarAvatarUuid ?? null) ??
+    parseLiveAvatarAvatarUuid(aidRaw ?? null);
   if (aid) {
     metaPayload.avatarId = aid;
   } else if (aidRaw) {
     console.warn(
-      '[MeetAssistant][LiveKit] Omitting avatarId from agent dispatch (not a LiveAvatar UUID):',
+      '[MeetAssistant][LiveKit] No LiveAvatar UUID for dispatch (HeyGen-style id or unset). Set meeting LiveAvatar UUID or LIVEKIT_FALLBACK_AVATAR_UUID:',
       aidRaw.slice(0, 80),
     );
   }
@@ -62,6 +78,11 @@ export async function createMeetLiveKitSession(options: {
   if (vid) metaPayload.voiceId = vid;
   const lang = language?.trim();
   if (lang) metaPayload.language = lang;
+  const kb = knowledgeBasePrompt?.trim();
+  if (kb) {
+    metaPayload.knowledgeBasePrompt =
+      kb.length > MAX_KB_METADATA_CHARS ? kb.slice(0, MAX_KB_METADATA_CHARS) : kb;
+  }
   const metadata = JSON.stringify(metaPayload);
 
   const roomService = new RoomServiceClient(httpUrl, creds.apiKey, creds.apiSecret);

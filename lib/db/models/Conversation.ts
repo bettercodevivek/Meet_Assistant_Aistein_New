@@ -18,6 +18,10 @@ export interface IConversation extends Document {
   /** Set when summary was analyzed (OpenAI); undefined = never checked */
   appointmentBooked?: boolean;
   appointmentCheckedAt?: Date;
+  /** Inferred appointment / meeting time when appointmentBooked is true */
+  appointmentAt?: Date;
+  /** Short description of the booked commitment */
+  appointmentDetails?: string;
   createdAt: Date;
   lastMessageAt: Date;
 }
@@ -82,6 +86,14 @@ const ConversationSchema = new Schema<IConversation>({
   },
   appointmentCheckedAt: {
     type: Date,
+  },
+  appointmentAt: {
+    type: Date,
+  },
+  appointmentDetails: {
+    type: String,
+    trim: true,
+    maxlength: 2000,
   },
   createdAt: {
     type: Date,

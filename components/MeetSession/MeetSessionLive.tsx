@@ -18,6 +18,9 @@ function MeetSessionRoomInner({
   guestName,
   guestToken,
   micStream,
+  cameraStream,
+  cameraOn,
+  onToggleCamera,
   onEndCall,
   streamLifecycleRef,
   onRecoveryTimeout,
@@ -26,6 +29,9 @@ function MeetSessionRoomInner({
   guestName: string;
   guestToken: string;
   micStream: MediaStream | null;
+  cameraStream: MediaStream | null;
+  cameraOn: boolean;
+  onToggleCamera: () => void;
   onEndCall: () => void;
   streamLifecycleRef: MutableRefObject<AvatarStreamLifecycleHandlers>;
   onRecoveryTimeout?: () => void;
@@ -111,6 +117,7 @@ function MeetSessionRoomInner({
 
             <MeetSessionSelfView
               audioStream={micStream}
+              cameraStream={cameraStream}
               guestName={guestName}
               isMuted={micControls.muted}
             />
@@ -148,6 +155,8 @@ function MeetSessionRoomInner({
         onSettingsOpen={() => setSettingsOpen(true)}
         onEndCall={() => setEndConfirm(true)}
         mic={micForBar}
+        cameraOn={cameraOn}
+        onCameraToggle={onToggleCamera}
       />
 
       <MeetSessionSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -192,6 +201,9 @@ export function MeetSessionLive({
   guestName: string;
   guestToken: string;
   micStream: MediaStream | null;
+  cameraStream: MediaStream | null;
+  cameraOn: boolean;
+  onToggleCamera: () => void;
   onMessageSent: (message: string, role: 'user' | 'assistant') => void;
   onEndCall: () => void;
   onRecoveryTimeout?: () => void;

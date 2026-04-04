@@ -1,3 +1,5 @@
+import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
+
 /**
  * LiveKit server (HTTPS) URL for RoomService / AgentDispatch APIs.
  * LIVEKIT_URL is typically wss://… for workers; we normalize to https://…
@@ -37,4 +39,13 @@ export const PLATFORM_LIVEKIT_AGENT_NAME = 'liveavatar-agent';
 
 export function meetRoomNameForConversation(conversationId: string): string {
   return `meet-${conversationId}`;
+}
+
+/** Server-only fallback when meeting avatar is a HeyGen id without a stored LiveAvatar UUID. */
+export function livekitFallbackAvatarUuid(): string | null {
+  const raw =
+    process.env.LIVEKIT_FALLBACK_AVATAR_UUID?.trim() ||
+    process.env.LIVEAVATAR_AVATAR_ID?.trim() ||
+    '';
+  return parseLiveAvatarAvatarUuid(raw || null);
 }

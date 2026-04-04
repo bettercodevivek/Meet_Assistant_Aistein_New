@@ -19,6 +19,8 @@ export interface IUser extends Document {
   /** Optional; used by voice agent / CRM-style lookups */
   phone?: string;
   googleIntegration?: IGoogleIntegration;
+  /** Up to 5 LiveAvatar public catalog picks (id from api.liveavatar.com). */
+  favoriteLiveAvatars?: { id: string; name: string }[];
 }
 
 const GoogleIntegrationSchema = new Schema(
@@ -74,6 +76,15 @@ const UserSchema = new Schema<IUser>({
   googleIntegration: {
     type: GoogleIntegrationSchema,
     required: false,
+  },
+  favoriteLiveAvatars: {
+    type: [
+      {
+        id: { type: String, required: true, trim: true },
+        name: { type: String, required: true, trim: true },
+      },
+    ],
+    default: [],
   },
 });
 

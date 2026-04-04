@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageSquare, Mic, MicOff, PhoneOff, Settings, Subtitles } from 'lucide-react';
+import { MessageSquare, Mic, MicOff, PhoneOff, Settings, Subtitles, Video, VideoOff } from 'lucide-react';
 
 function lightenHex(hex: string, pct: number) {
   const n = hex.replace('#', '');
@@ -25,6 +25,8 @@ export function MeetSessionControlBar({
   onSettingsOpen,
   onEndCall,
   mic,
+  cameraOn,
+  onCameraToggle,
 }: {
   chatOpen: boolean;
   onChatToggle: () => void;
@@ -33,6 +35,8 @@ export function MeetSessionControlBar({
   onSettingsOpen: () => void;
   onEndCall: () => void;
   mic: MeetSessionMicProps;
+  cameraOn: boolean;
+  onCameraToggle: () => void;
 }) {
   const toggleMic = () => {
     if (!mic.active) return;
@@ -64,6 +68,29 @@ export function MeetSessionControlBar({
           <MicOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
         ) : (
           <Mic className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+        )}
+      </button>
+
+      <button
+        type="button"
+        title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+        aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+        aria-pressed={cameraOn}
+        style={{ backgroundColor: cameraOn ? '#1A73E8' : '#3C4043' }}
+        onMouseEnter={(e) => {
+          const base = cameraOn ? '#1A73E8' : '#3C4043';
+          e.currentTarget.style.backgroundColor = lightenHex(base, 0.1);
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = cameraOn ? '#1A73E8' : '#3C4043';
+        }}
+        onClick={onCameraToggle}
+        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
+      >
+        {cameraOn ? (
+          <Video className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+        ) : (
+          <VideoOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
         )}
       </button>
 

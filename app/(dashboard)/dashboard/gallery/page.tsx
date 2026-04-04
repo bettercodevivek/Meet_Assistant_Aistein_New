@@ -2,7 +2,7 @@
 
 import type { HeyGenAvatarCatalogItem } from "@/lib/avatars/types";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus, X } from "lucide-react";
 
@@ -15,7 +15,7 @@ import {
 } from "@/lib/avatars/favoritesStorage";
 import { useFavoriteAvatars } from "@/lib/avatars/useFavoriteAvatars";
 
-const PAGE_SIZE = 48;
+const PAGE_SIZE = 20;
 
 function AvatarPreviewCard({
   item,
@@ -32,7 +32,9 @@ function AvatarPreviewCard({
   hoverVideoId: string | null;
   onHoverChange: (id: string | null) => void;
 }) {
-  const showVideo = hoverVideoId === item.avatar_id;
+  const showVideo =
+    hoverVideoId === item.avatar_id && Boolean(item.preview_video_url?.trim());
+  const hasImage = Boolean(item.preview_image_url?.trim());
 
   const atLimitBlocked = !selected && !canAdd;
 
@@ -47,7 +49,7 @@ function AvatarPreviewCard({
       onMouseLeave={() => onHoverChange(null)}
     >
       <div className="relative aspect-[3/4] bg-slate-100">
-        {showVideo && item.preview_video_url ? (
+        {showVideo ? (
           <video
             key={item.avatar_id}
             autoPlay
@@ -58,7 +60,7 @@ function AvatarPreviewCard({
             preload="metadata"
             src={item.preview_video_url}
           />
-        ) : (
+        ) : hasImage ? (
           <img
             alt=""
             className="h-full w-full object-cover"
@@ -66,6 +68,10 @@ function AvatarPreviewCard({
             loading="lazy"
             src={item.preview_image_url}
           />
+        ) : (
+          <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-secondary">
+            No preview
+          </div>
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-6 pt-12">
           <p className="line-clamp-2 text-center text-[11px] font-medium text-white drop-shadow-sm">
@@ -122,29 +128,78 @@ export default function GalleryPage() {
   const [catalog, setCatalog] = useState<HeyGenAvatarCatalogItem[] | null>(
     null,
   );
+  const [totalCount, setTotalCount] = useState(0);
+  const [nextPage, setNextPage] = useState(2);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [hoverVideoId, setHoverVideoId] = useState<string | null>(null);
 
+  const fetchPage = useCallback(async (page: number, append: boolean) => {
+    const res = await fetch(
+      `/api/liveavatar/public-avatars?page=${page}&page_size=${PAGE_SIZE}`,
+      { credentials: "include" },
+    );
+    const data = (await res.json()) as {
+      success?: boolean;
+      message?: string;
+      avatars?: HeyGenAvatarCatalogItem[];
+      count?: number;
+    };
+
+    if (!res.ok || !data.success || !Array.isArray(data.avatars)) {
+      return {
+        ok: false as const,
+        message: data.message || "Could not load gallery",
+      };
+    }
+
+    const avatars = data.avatars;
+
+    let capTotalToLoaded = 0;
+    setCatalog((prev) => {
+      if (append && avatars.length === 0) {
+        capTotalToLoaded = prev?.length ?? 0;
+        return prev ?? [];
+      }
+      return append && prev ? [...prev, ...avatars] : avatars;
+    });
+    if (capTotalToLoaded > 0) {
+      setTotalCount(capTotalToLoaded);
+      return { ok: true as const };
+    }
+
+    if (typeof data.count === "number") {
+      setTotalCount(data.count);
+    } else if (!append) {
+      setTotalCount(avatars.length);
+    }
+    setNextPage(page + 1);
+
+    return { ok: true as const };
+  }, []);
+
   useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    setCatalog(null);
+    setTotalCount(0);
+    setNextPage(2);
+
     void (async () => {
-      try {
-        const res = await fetch("/api/avatars");
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          setLoadError(data.message || "Could not load gallery");
-
-          return;
-        }
-        setCatalog(data.avatars as HeyGenAvatarCatalogItem[]);
-      } catch {
-        setLoadError("Could not load gallery");
+      const result = await fetchPage(1, false);
+      if (cancelled) return;
+      if (!result.ok) {
+        setLoadError(result.message);
       }
     })();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPage]);
 
   const filtered = useMemo(() => {
     if (!catalog) return [];
@@ -178,10 +233,28 @@ export default function GalleryPage() {
     return m;
   }, [catalog]);
 
+  const hasMoreRemote =
+    catalog != null &&
+    (totalCount > 0 ? catalog.length < totalCount : catalog.length >= PAGE_SIZE);
+
+  const loadMoreRemote = async () => {
+    if (loadingMore || !hasMoreRemote) return;
+    setLoadingMore(true);
+    setLoadError(null);
+    try {
+      const result = await fetchPage(nextPage, true);
+      if (!result.ok) {
+        setLoadError(result.message);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
-        subtitle="Preview avatars, hover cards for video. Choose up to five for the meeting link form."
+        subtitle="LiveAvatar public catalog. Pick up to five — stored on your account for Create meeting link."
         title="Gallery"
       />
 
@@ -217,7 +290,7 @@ export default function GalleryPage() {
                     title="Remove from meeting avatars"
                     type="button"
                     onClick={() =>
-                      setFavoritesAndPersist(
+                      void setFavoritesAndPersist(
                         removeFavoriteAvatar(favorites, f.id),
                       )
                     }
@@ -261,8 +334,11 @@ export default function GalleryPage() {
           <p className="mt-2 text-sm text-tertiary">
             Showing {slice.length} of {filtered.length}
             {deferredQuery.trim()
-              ? ` (from ${catalog.length} total)`
-              : ` avatars`}
+              ? ` (from ${catalog.length} loaded)`
+              : ` avatars loaded`}
+            {totalCount > catalog.length
+              ? ` — ${totalCount} total in catalog`
+              : null}
           </p>
         ) : null}
       </div>
@@ -295,7 +371,7 @@ export default function GalleryPage() {
                   onToggle={() => {
                     const next = toggleFavoriteAvatar(favorites, item);
 
-                    setFavoritesAndPersist(next);
+                    void setFavoritesAndPersist(next);
                   }}
                 />
               );
@@ -308,7 +384,22 @@ export default function GalleryPage() {
                 type="button"
                 onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
               >
-                Load more
+                Show more (filter)
+              </button>
+            </div>
+          ) : null}
+          {visibleCount >= filtered.length && hasMoreRemote ? (
+            <div className="mt-8 flex justify-center">
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-primary shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                disabled={loadingMore}
+                type="button"
+                onClick={() => void loadMoreRemote()}
+              >
+                {loadingMore ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : null}
+                Load more from LiveAvatar
               </button>
             </div>
           ) : null}

@@ -4,6 +4,8 @@ import Meeting from '@/lib/db/models/Meeting';
 import KnowledgeBase from '@/lib/db/models/KnowledgeBase';
 import User from '@/lib/db/models/User';
 import { requireAuth } from '@/lib/auth/middleware';
+import { authUserObjectId } from '@/lib/auth/userObjectId';
+import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
 import { publicAppOrigin, meetingShareUrl } from '@/lib/meetings/publicOrigin';
 import { sendMeetingInviteEmail } from '@/lib/google/sendMeetingInviteEmail';
 
@@ -24,6 +26,7 @@ function serializeMeetingListItem(m: InstanceType<typeof Meeting>) {
     meetingId: m.meetingId,
     title: m.title,
     avatarId: m.avatarId,
+    liveAvatarAvatarUuid: m.liveAvatarAvatarUuid,
     voiceId: m.voiceId,
     language: m.language,
     knowledgeBaseId: String(m.knowledgeBaseId),
@@ -44,6 +47,14 @@ export async function GET(request: NextRequest) {
     const user = requireAuth(request);
     await connectDB();
 
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
     const limitRaw = parseInt(searchParams.get('limit') || '20', 10) || 20;
@@ -51,7 +62,7 @@ export async function GET(request: NextRequest) {
     const statusParam = searchParams.get('status');
 
     const filter: Record<string, unknown> = {
-      createdBy: user.userId,
+      createdBy: userOid,
     };
     if (
       statusParam &&
@@ -96,6 +107,7 @@ export async function POST(request: NextRequest) {
     const {
       title,
       avatarId,
+      liveAvatarAvatarUuid,
       voiceId,
       language,
       knowledgeBaseId,
@@ -113,9 +125,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const userOid = authUserObjectId(user.userId);
+    if (!userOid) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 },
+      );
+    }
+
     const kb = await KnowledgeBase.findOne({
       _id: knowledgeBaseId,
-      userId: user.userId,
+      userId: userOid,
     });
 
     if (!kb) {
@@ -143,10 +163,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let liveUuid: string | undefined;
+    if (typeof liveAvatarAvatarUuid === 'string' && liveAvatarAvatarUuid.trim()) {
+      const parsed = parseLiveAvatarAvatarUuid(liveAvatarAvatarUuid.trim());
+      if (!parsed) {
+        return NextResponse.json(
+          { success: false, message: 'liveAvatarAvatarUuid must be a valid UUID' },
+          { status: 400 },
+        );
+      }
+      liveUuid = parsed;
+    } else {
+      const fromAvatar = parseLiveAvatarAvatarUuid(String(avatarId).trim());
+      if (fromAvatar) liveUuid = fromAvatar;
+    }
+
     const meeting = await Meeting.create({
-      createdBy: user.userId,
+      createdBy: userOid,
       title,
       avatarId,
+      ...(liveUuid ? { liveAvatarAvatarUuid: liveUuid } : {}),
       voiceId,
       language,
       knowledgeBaseId,
@@ -173,11 +209,11 @@ export async function POST(request: NextRequest) {
       if (!EMAIL_RE.test(inviteTo)) {
         invite = { sent: false, reason: 'invalid_email' };
       } else {
-        const organizer = await User.findById(user.userId).select('username');
+        const organizer = await User.findById(userOid).select('username');
         const organizerName = organizer?.username?.trim() || 'Host';
         const sendResult = await sendMeetingInviteEmail(
           request,
-          user.userId,
+          userOid.toString(),
           {
             to: inviteTo,
             meetingTitle: title,
@@ -208,6 +244,7 @@ export async function POST(request: NextRequest) {
         shareUrl,
         title: meeting.title,
         avatarId: meeting.avatarId,
+        liveAvatarAvatarUuid: meeting.liveAvatarAvatarUuid,
         voiceId: meeting.voiceId,
         language: meeting.language,
         knowledgeBaseId: String(meeting.knowledgeBaseId),

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { findConversationWithAccess } from '@/lib/conversations/accessConversation';
 import connectDB from '@/lib/db/mongodb';
+import Meeting from '@/lib/db/models/Meeting';
 import { createMeetLiveKitSession } from '@/lib/livekit/createMeetLiveKitSession';
-import { isLiveKitMeetEnabled } from '@/lib/livekit/config';
+import { isLiveKitMeetEnabled, livekitFallbackAvatarUuid } from '@/lib/livekit/config';
+import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
 
 export async function POST(
   request: NextRequest,
@@ -47,12 +49,44 @@ export async function POST(
     }
 
     const conv = access.conversation;
+
+    let knowledgeBasePrompt = '';
+    const kbDoc = conv.knowledgeBaseId as unknown;
+    if (
+      kbDoc &&
+      typeof kbDoc === 'object' &&
+      'prompt' in kbDoc &&
+      typeof (kbDoc as { prompt?: string }).prompt === 'string'
+    ) {
+      knowledgeBasePrompt = (kbDoc as { prompt: string }).prompt;
+    }
+
+    let resolvedLiveAvatarUuid =
+      parseLiveAvatarAvatarUuid(conv.avatarId || null) || null;
+    const mid = conv.meetingId;
+    if (!resolvedLiveAvatarUuid && mid) {
+      const meetingId =
+        typeof mid === 'object' && mid !== null && '_id' in mid
+          ? String((mid as { _id: { toString(): string } })._id)
+          : String(mid);
+      const meeting = await Meeting.findById(meetingId).select('liveAvatarAvatarUuid');
+      if (meeting?.liveAvatarAvatarUuid) {
+        resolvedLiveAvatarUuid =
+          parseLiveAvatarAvatarUuid(meeting.liveAvatarAvatarUuid) || resolvedLiveAvatarUuid;
+      }
+    }
+    if (!resolvedLiveAvatarUuid) {
+      resolvedLiveAvatarUuid = livekitFallbackAvatarUuid();
+    }
+
     const session = await createMeetLiveKitSession({
       conversationId: id,
       guestName: guestName || 'Guest',
       avatarId: conv.avatarId,
+      liveAvatarAvatarUuid: resolvedLiveAvatarUuid,
       voiceId: conv.voiceId,
       language: conv.language,
+      knowledgeBasePrompt: knowledgeBasePrompt || null,
     });
 
     console.info('[MeetAssistant][LiveKit] livekit-session OK', {

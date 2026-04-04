@@ -8,29 +8,34 @@ export interface IKnowledgeBase extends Document {
   updatedAt: Date;
 }
 
-const KnowledgeBaseSchema = new Schema<IKnowledgeBase>({
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
+const KnowledgeBaseSchema = new Schema<IKnowledgeBase>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    prompt: {
+      type: String,
+      required: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  name: {
-    type: String,
-    required: true,
-  },
-  prompt: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  { collection: 'knowledgebases' },
+);
 
-export default (mongoose.models.KnowledgeBase as Model<IKnowledgeBase>) || mongoose.model<IKnowledgeBase>('KnowledgeBase', KnowledgeBaseSchema);
+export default (mongoose.models.KnowledgeBase as Model<IKnowledgeBase>) ||
+  mongoose.model<IKnowledgeBase>('KnowledgeBase', KnowledgeBaseSchema);
 

@@ -8,6 +8,8 @@ export interface IMeeting extends Document {
   createdBy: mongoose.Types.ObjectId;
   title: string;
   avatarId: string;
+  /** LiveAvatar / LiveKit session API expects a UUID; optional when avatarId is already a UUID */
+  liveAvatarAvatarUuid?: string;
   voiceId?: string;
   language: string;
   knowledgeBaseId: mongoose.Types.ObjectId;
@@ -43,6 +45,10 @@ const MeetingSchema = new Schema<IMeeting>(
     avatarId: {
       type: String,
       required: true,
+    },
+    liveAvatarAvatarUuid: {
+      type: String,
+      trim: true,
     },
     voiceId: {
       type: String,
