@@ -2,6 +2,7 @@
 
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   ConnectionState,
   Room,
@@ -14,6 +15,17 @@ import {
 
 import type { AvatarStreamLifecycleHandlers } from '@/components/logic';
 import type { SessionConversation } from '@/components/meeting/sessionTypes';
+
+/** Shown while connecting and until the agent publishes video (can be 10–15+ seconds). */
+const MEET_PREP_MESSAGES = [
+  'Setting up your environment…',
+  'Connecting to the session…',
+  'Preparing your AI host…',
+  'Almost there…',
+] as const;
+
+const AGENT_VIDEO_WAIT_MAX_MS = 60_000;
+const PREP_MESSAGE_ROTATE_MS = 2800;
 
 export type MeetMicControls = {
   muted: boolean;
@@ -61,7 +73,12 @@ export function MeetLiveKitRoom({
 
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'connecting' | 'live' | 'failed'>('connecting');
+  const [agentVideoReady, setAgentVideoReady] = useState(false);
+  const [prepMessageIndex, setPrepMessageIndex] = useState(0);
   const micMutedRef = useRef(false);
+
+  const showPrepOverlay =
+    phase !== 'failed' && !error && (phase === 'connecting' || (phase === 'live' && !agentVideoReady));
 
   const pushMicControls = useCallback(
     (active: boolean) => {
@@ -80,17 +97,30 @@ export function MeetLiveKitRoom({
     [setMicControls],
   );
 
+  const markAgentVideoReady = useCallback(() => {
+    setAgentVideoReady(true);
+  }, []);
+
   const bindRemoteTrack = useCallback(
     (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
       if (!isLikelyAgentParticipant(participant)) return;
       if (track.kind === Track.Kind.Video) {
         attachVideo(track, videoRef.current);
+        const el = videoRef.current;
+        if (el) {
+          const onReady = () => markAgentVideoReady();
+          if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            onReady();
+          } else {
+            el.addEventListener('loadeddata', onReady, { once: true });
+          }
+        }
       }
       if (track.kind === Track.Kind.Audio) {
         attachAudio(track, audioRef.current);
       }
     },
-    [],
+    [markAgentVideoReady],
   );
 
   const publishMic = useCallback(async (room: Room) => {
@@ -115,6 +145,8 @@ export function MeetLiveKitRoom({
 
   useEffect(() => {
     let cancelled = false;
+    setAgentVideoReady(false);
+    setPrepMessageIndex(0);
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
@@ -219,6 +251,22 @@ export function MeetLiveKitRoom({
     void publishMic(room);
   }, [micStream, publishMic]);
 
+  useEffect(() => {
+    if (!showPrepOverlay) return;
+    const id = window.setInterval(() => {
+      setPrepMessageIndex((i) => (i + 1) % MEET_PREP_MESSAGES.length);
+    }, PREP_MESSAGE_ROTATE_MS);
+    return () => window.clearInterval(id);
+  }, [showPrepOverlay]);
+
+  useEffect(() => {
+    if (!showPrepOverlay) return;
+    const id = window.setTimeout(() => {
+      setAgentVideoReady(true);
+    }, AGENT_VIDEO_WAIT_MAX_MS);
+    return () => window.clearTimeout(id);
+  }, [showPrepOverlay]);
+
   if (error || phase === 'failed') {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
@@ -234,9 +282,6 @@ export function MeetLiveKitRoom({
 
   return (
     <div className="relative flex h-full w-full items-center justify-center bg-black">
-      {phase === 'connecting' ? (
-        <p className="text-sm text-[#9AA0A6]">Connecting to session…</p>
-      ) : null}
       <video
         ref={videoRef}
         className="max-h-full max-w-full object-contain"
@@ -245,6 +290,23 @@ export function MeetLiveKitRoom({
         muted={false}
       />
       <audio ref={audioRef} className="hidden" autoPlay />
+
+      {showPrepOverlay ? (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-[#0b0b0c]/92 px-8 text-center"
+          aria-busy="true"
+          aria-live="polite"
+          aria-label="Session starting"
+        >
+          <Loader2 className="h-10 w-10 shrink-0 animate-spin text-white/85" aria-hidden />
+          <p className="max-w-sm text-base font-medium leading-snug text-white">
+            {MEET_PREP_MESSAGES[prepMessageIndex]}
+          </p>
+          <p className="max-w-xs text-xs leading-relaxed text-[#9AA0A6]">
+            Your AI host may take a few seconds to join. You can speak as soon as the call is live.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
