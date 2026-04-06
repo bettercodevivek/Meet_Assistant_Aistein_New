@@ -10,10 +10,16 @@ export function buildMeetInviteEmailHtml(params: {
   meetingTitle: string;
   joinUrl: string;
   organizerName: string;
+  /** e.g. "Spanish" — shown so guests know which language the assistant will use */
+  assistantLanguageLabel?: string;
 }): string {
   const title = escapeHtml(params.meetingTitle);
   const url = escapeHtml(params.joinUrl);
   const organizer = escapeHtml(params.organizerName);
+  const langLabel = params.assistantLanguageLabel?.trim();
+  const langLine = langLabel
+    ? `<p style="margin:14px 0 0 0;font-size:14px;line-height:1.5;color:#475569;">Assistant language for this session: <strong style="color:#0f172a;">${escapeHtml(langLabel)}</strong></p>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -32,6 +38,7 @@ export function buildMeetInviteEmailHtml(params: {
               <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">MeetAssistant</p>
               <h1 style="margin:12px 0 0 0;font-size:22px;line-height:1.25;color:#0f172a;">You’re invited</h1>
               <p style="margin:14px 0 0 0;font-size:15px;line-height:1.55;color:#475569;">${organizer} shared a meeting link with you.</p>
+              ${langLine}
               <p style="margin:18px 0 0 0;padding:14px 16px;background:#f1f5f9;border-radius:12px;font-size:16px;font-weight:600;color:#0f172a;">${title}</p>
             </td>
           </tr>

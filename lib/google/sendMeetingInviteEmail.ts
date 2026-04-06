@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db/mongodb';
 import User from '@/lib/db/models/User';
+import { getAppSettings } from '@/lib/db/getAppSettings';
+import { sendMeetingInviteViaKepler, keplerEmailApiBaseUrl } from '@/lib/email/keplerEmailClient';
 import { createGoogleOAuth2Client } from '@/lib/google/createOAuth2Client';
 import { buildMeetInviteEmailHtml } from '@/lib/google/meetInviteHtml';
 import type { NextRequest } from 'next/server';
@@ -45,15 +47,46 @@ export async function sendMeetingInviteEmail(
     meetingTitle: string;
     joinUrl: string;
     organizerName: string;
+    /** Optional; e.g. "Spanish" for invite copy */
+    assistantLanguageLabel?: string;
   },
 ): Promise<SendInviteResult> {
   await connectDB();
+
+  const html = buildMeetInviteEmailHtml({
+    meetingTitle: params.meetingTitle,
+    joinUrl: params.joinUrl,
+    organizerName: params.organizerName,
+    assistantLanguageLabel: params.assistantLanguageLabel,
+  });
+  const subject = `Invitation: ${params.meetingTitle}`;
+
+  const appSettings = await getAppSettings();
+  const keplerFrom = appSettings.keplerGmailEmail?.trim();
+  if (keplerFrom && keplerFrom.includes('@') && keplerEmailApiBaseUrl()) {
+    const keplerResult = await sendMeetingInviteViaKepler({
+      xUserEmail: keplerFrom,
+      to: params.to,
+      subject,
+      htmlBody: html,
+    });
+    if (keplerResult.ok) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      code: 'send_failed',
+      message: keplerResult.message,
+    };
+  }
+
   const user = await User.findById(userId);
   if (!user?.googleIntegration?.refreshToken) {
     return {
       ok: false,
       code: 'not_connected',
-      message: 'Connect Google Workspace in Integrations to send invites.',
+      message:
+        'Connect Gmail under Admin → Email (recommended) or Google Workspace under Integrations to send invites.',
     };
   }
 
@@ -93,14 +126,6 @@ export async function sendMeetingInviteEmail(
       await User.updateOne({ _id: uid }, { $set });
     }
   });
-
-  const html = buildMeetInviteEmailHtml({
-    meetingTitle: params.meetingTitle,
-    joinUrl: params.joinUrl,
-    organizerName: params.organizerName,
-  });
-
-  const subject = `Invitation: ${params.meetingTitle}`;
 
   try {
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });

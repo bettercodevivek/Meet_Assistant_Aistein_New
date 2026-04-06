@@ -6,6 +6,7 @@ import User from '@/lib/db/models/User';
 import { requireAuth } from '@/lib/auth/middleware';
 import { authUserObjectId } from '@/lib/auth/userObjectId';
 import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
+import { labelForLanguageCode } from '@/app/lib/constants';
 import { publicAppOrigin, meetingShareUrl } from '@/lib/meetings/publicOrigin';
 import { sendMeetingInviteEmail } from '@/lib/google/sendMeetingInviteEmail';
 
@@ -219,6 +220,10 @@ export async function POST(request: NextRequest) {
             meetingTitle: title,
             joinUrl: shareUrl,
             organizerName,
+            assistantLanguageLabel:
+              typeof language === 'string' && language.trim()
+                ? labelForLanguageCode(language)
+                : undefined,
           },
         );
         if (sendResult.ok) {

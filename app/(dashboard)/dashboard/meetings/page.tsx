@@ -564,7 +564,8 @@ function MeetingFormModal({
                 autoComplete="email"
               />
               <p className="mt-1.5 text-xs text-tertiary">
-                Sends a join link from your connected Gmail. Connect Google in{" "}
+                Sends a join link when Gmail is configured: an admin can connect organization email
+                under Admin → Email (Gmail), or you can connect your own Google account in{" "}
                 <Link
                   href="/dashboard/integrations"
                   className="font-medium text-brand-600 hover:text-brand-700"

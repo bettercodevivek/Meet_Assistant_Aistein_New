@@ -9,6 +9,7 @@ import {
   Images,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   MonitorPlay,
   MessageSquare,
@@ -136,6 +137,11 @@ export default function Sidebar() {
             label: "API key",
             Icon: KeyRound,
           },
+          {
+            href: "/dashboard/admin/email",
+            label: "Email (Gmail)",
+            Icon: Mail,
+          },
         ] as const)
       : [];
 
@@ -170,6 +176,9 @@ export default function Sidebar() {
     }
     if (href === "/dashboard/admin/api-key") {
       return pathname.startsWith("/dashboard/admin/api-key");
+    }
+    if (href === "/dashboard/admin/email") {
+      return pathname.startsWith("/dashboard/admin/email");
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };

@@ -51,3 +51,10 @@ export const STT_LANGUAGE_LIST = [
   { label: "Ukrainian", value: "uk", key: "uk" },
   { label: "Vietnamese", value: "vi", key: "vi" },
 ];
+
+/** Human-readable label for a meeting language code (ISO 639-1). */
+export function labelForLanguageCode(code: string): string {
+  const c = code.trim().toLowerCase();
+  const found = STT_LANGUAGE_LIST.find((l) => l.value === c);
+  return found?.label ?? code;
+}
