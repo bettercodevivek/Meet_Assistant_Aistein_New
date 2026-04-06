@@ -6,6 +6,44 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Single-line safe text for plain-text email (no HTML). */
+function oneLine(s: string): string {
+  return s.replace(/\r?\n/g, ' ').trim();
+}
+
+/**
+ * Plain-text invite for APIs (e.g. Kepler `/email/send`) that send `body` as text/plain.
+ * HTML in `body` is shown as raw tags in Gmail — do not use HTML there.
+ */
+export function buildMeetInviteEmailPlainText(params: {
+  meetingTitle: string;
+  joinUrl: string;
+  organizerName: string;
+  assistantLanguageLabel?: string;
+}): string {
+  const title = oneLine(params.meetingTitle);
+  const url = oneLine(params.joinUrl);
+  const organizer = oneLine(params.organizerName);
+  const lang = params.assistantLanguageLabel?.trim();
+  const langBlock = lang
+    ? `\nAssistant language for this session: ${oneLine(lang)}\n`
+    : '\n';
+
+  return `MeetAssistant — You're invited
+
+${organizer} shared a meeting link with you.
+${langBlock}
+Meeting: ${title}
+
+Join the meeting:
+${url}
+
+If the link does not work, copy and paste the URL into your browser.
+
+—
+Sent via MeetAssistant`;
+}
+
 export function buildMeetInviteEmailHtml(params: {
   meetingTitle: string;
   joinUrl: string;

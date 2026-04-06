@@ -5,7 +5,10 @@ import User from '@/lib/db/models/User';
 import { getAppSettings } from '@/lib/db/getAppSettings';
 import { sendMeetingInviteViaKepler, keplerEmailApiBaseUrl } from '@/lib/email/keplerEmailClient';
 import { createGoogleOAuth2Client } from '@/lib/google/createOAuth2Client';
-import { buildMeetInviteEmailHtml } from '@/lib/google/meetInviteHtml';
+import {
+  buildMeetInviteEmailHtml,
+  buildMeetInviteEmailPlainText,
+} from '@/lib/google/meetInviteHtml';
 import type { NextRequest } from 'next/server';
 
 function encodeRawEmail(params: {
@@ -59,6 +62,12 @@ export async function sendMeetingInviteEmail(
     organizerName: params.organizerName,
     assistantLanguageLabel: params.assistantLanguageLabel,
   });
+  const plainText = buildMeetInviteEmailPlainText({
+    meetingTitle: params.meetingTitle,
+    joinUrl: params.joinUrl,
+    organizerName: params.organizerName,
+    assistantLanguageLabel: params.assistantLanguageLabel,
+  });
   const subject = `Invitation: ${params.meetingTitle}`;
 
   const appSettings = await getAppSettings();
@@ -68,7 +77,7 @@ export async function sendMeetingInviteEmail(
       xUserEmail: keplerFrom,
       to: params.to,
       subject,
-      htmlBody: html,
+      bodyPlain: plainText,
     });
     if (keplerResult.ok) {
       return { ok: true };

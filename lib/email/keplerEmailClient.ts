@@ -13,7 +13,8 @@ export async function sendMeetingInviteViaKepler(params: {
   xUserEmail: string;
   to: string;
   subject: string;
-  htmlBody: string;
+  /** Plain text only — Kepler sends `body` as text/plain; HTML would show as raw markup in Gmail. */
+  bodyPlain: string;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   const base = keplerEmailApiBaseUrl();
   if (!base) {
@@ -38,7 +39,7 @@ export async function sendMeetingInviteViaKepler(params: {
       body: JSON.stringify({
         to: params.to,
         subject: params.subject,
-        body: params.htmlBody,
+        body: params.bodyPlain,
       }),
     });
 
