@@ -28,6 +28,7 @@ export type MeetLiveKitSessionResult = {
  * values as the Next.js conversation even if MongoDB URI database names differ.
  */
 const MAX_KB_METADATA_CHARS = 28_000;
+const MAX_KB_FIRST_MESSAGE_CHARS = 8_000;
 
 export async function createMeetLiveKitSession(options: {
   conversationId: string;
@@ -39,6 +40,8 @@ export async function createMeetLiveKitSession(options: {
   language?: string | null;
   /** Injected into agent job metadata so the worker uses the same KB without DB drift. */
   knowledgeBasePrompt?: string | null;
+  /** Opening reply instruction / first message for this KB (optional). */
+  knowledgeBaseFirstMessage?: string | null;
 }): Promise<MeetLiveKitSessionResult> {
   const httpUrl = livekitHttpUrl();
   const wsUrl = livekitWsUrl();
@@ -58,6 +61,7 @@ export async function createMeetLiveKitSession(options: {
     voiceId,
     language,
     knowledgeBasePrompt,
+    knowledgeBaseFirstMessage,
   } = options;
   const roomName = meetRoomNameForConversation(conversationId);
 
@@ -82,6 +86,13 @@ export async function createMeetLiveKitSession(options: {
   if (kb) {
     metaPayload.knowledgeBasePrompt =
       kb.length > MAX_KB_METADATA_CHARS ? kb.slice(0, MAX_KB_METADATA_CHARS) : kb;
+  }
+  const kbFirst = knowledgeBaseFirstMessage?.trim();
+  if (kbFirst) {
+    metaPayload.knowledgeBaseFirstMessage =
+      kbFirst.length > MAX_KB_FIRST_MESSAGE_CHARS
+        ? kbFirst.slice(0, MAX_KB_FIRST_MESSAGE_CHARS)
+        : kbFirst;
   }
   const metadata = JSON.stringify(metaPayload);
 

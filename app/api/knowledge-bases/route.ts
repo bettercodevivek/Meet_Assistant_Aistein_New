@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         id: String(kb._id),
         name: kb.name,
         prompt: kb.prompt,
+        firstMessage: kb.firstMessage ?? '',
         createdAt: kb.createdAt,
         updatedAt: kb.updatedAt,
       })),
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     const user = requireAuth(request);
     await connectDB();
     
-    const { name, prompt } = await request.json();
+    const { name, prompt, firstMessage } = await request.json();
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -66,6 +67,8 @@ export async function POST(request: NextRequest) {
 
     const nameTrim = typeof name === 'string' ? name.trim() : '';
     const promptTrim = typeof prompt === 'string' ? prompt.trim() : '';
+    const firstMessageTrim =
+      typeof firstMessage === 'string' ? firstMessage.trim() : '';
     if (!nameTrim || !promptTrim) {
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
       userId: userOid,
       name: nameTrim,
       prompt: promptTrim,
+      firstMessage: firstMessageTrim,
     });
     
     return NextResponse.json({
@@ -85,6 +89,7 @@ export async function POST(request: NextRequest) {
         id: String(knowledgeBase._id),
         name: knowledgeBase.name,
         prompt: knowledgeBase.prompt,
+        firstMessage: knowledgeBase.firstMessage ?? '',
         createdAt: knowledgeBase.createdAt,
         updatedAt: knowledgeBase.updatedAt,
       },

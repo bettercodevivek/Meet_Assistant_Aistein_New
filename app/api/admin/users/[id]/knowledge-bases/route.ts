@@ -32,6 +32,7 @@ export async function GET(
       id: String(kb._id),
       name: kb.name,
       prompt: kb.prompt,
+      firstMessage: kb.firstMessage ?? '',
       createdAt: kb.createdAt,
       updatedAt: kb.updatedAt,
     }));

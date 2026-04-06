@@ -51,14 +51,16 @@ export async function POST(
     const conv = access.conversation;
 
     let knowledgeBasePrompt = '';
+    let knowledgeBaseFirstMessage = '';
     const kbDoc = conv.knowledgeBaseId as unknown;
-    if (
-      kbDoc &&
-      typeof kbDoc === 'object' &&
-      'prompt' in kbDoc &&
-      typeof (kbDoc as { prompt?: string }).prompt === 'string'
-    ) {
-      knowledgeBasePrompt = (kbDoc as { prompt: string }).prompt;
+    if (kbDoc && typeof kbDoc === 'object') {
+      const kb = kbDoc as { prompt?: string; firstMessage?: string };
+      if (typeof kb.prompt === 'string') {
+        knowledgeBasePrompt = kb.prompt;
+      }
+      if (typeof kb.firstMessage === 'string') {
+        knowledgeBaseFirstMessage = kb.firstMessage;
+      }
     }
 
     let resolvedLiveAvatarUuid =
@@ -87,6 +89,7 @@ export async function POST(
       voiceId: conv.voiceId,
       language: conv.language,
       knowledgeBasePrompt: knowledgeBasePrompt || null,
+      knowledgeBaseFirstMessage: knowledgeBaseFirstMessage.trim() || null,
     });
 
     console.info('[MeetAssistant][LiveKit] livekit-session OK', {

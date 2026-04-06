@@ -14,7 +14,7 @@ export async function PUT(
     
     const { id } = await params;
     const body = await request.json();
-    const { name, prompt } = body;
+    const { name, prompt, firstMessage } = body;
     
     // Validation
     if (!name || !prompt) {
@@ -36,6 +36,9 @@ export async function PUT(
     // Update knowledge base
     knowledgeBase.name = name;
     knowledgeBase.prompt = prompt;
+    if (typeof firstMessage === 'string') {
+      knowledgeBase.firstMessage = firstMessage.trim();
+    }
     knowledgeBase.updatedAt = new Date();
     await knowledgeBase.save();
     
@@ -46,6 +49,7 @@ export async function PUT(
         id: String(knowledgeBase._id),
         name: knowledgeBase.name,
         prompt: knowledgeBase.prompt,
+        firstMessage: knowledgeBase.firstMessage ?? '',
         updatedAt: knowledgeBase.updatedAt,
       },
     });

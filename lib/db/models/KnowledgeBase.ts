@@ -4,6 +4,8 @@ export interface IKnowledgeBase extends Document {
   userId: mongoose.Types.ObjectId;
   name: string;
   prompt: string;
+  /** Optional opening instruction / first reply for the avatar when this KB is used. */
+  firstMessage: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,10 @@ const KnowledgeBaseSchema = new Schema<IKnowledgeBase>(
     prompt: {
       type: String,
       required: true,
+    },
+    firstMessage: {
+      type: String,
+      default: '',
     },
     createdAt: {
       type: Date,

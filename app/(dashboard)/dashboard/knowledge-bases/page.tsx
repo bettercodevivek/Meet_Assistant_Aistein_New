@@ -9,6 +9,7 @@ interface KnowledgeBase {
   id: string;
   name: string;
   prompt: string;
+  firstMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,7 +69,7 @@ export default function KnowledgeBasesPage() {
     <div>
       <PageHeader
         title="Knowledge bases"
-        subtitle="Manage your avatar knowledge bases and system prompts"
+        subtitle="Manage your avatar knowledge bases, system prompts, and optional first message"
         action={
           <button
             type="button"
@@ -110,9 +111,19 @@ export default function KnowledgeBasesPage() {
               className="flex flex-col rounded-xl border border-slate-200 bg-primary p-5 shadow-sm transition-all hover:border-slate-300 hover:shadow-md"
             >
               <h3 className="text-base font-semibold text-primary">{kb.name}</h3>
-              <div className="mt-3 min-h-0 flex-1">
-                <p className="text-[13px] font-medium text-slate-600">System prompt preview</p>
-                <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-tertiary">{kb.prompt}</p>
+              <div className="mt-3 min-h-0 flex-1 space-y-2">
+                <div>
+                  <p className="text-[13px] font-medium text-slate-600">System prompt preview</p>
+                  <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-tertiary">{kb.prompt}</p>
+                </div>
+                {kb.firstMessage ? (
+                  <div>
+                    <p className="text-[13px] font-medium text-slate-600">First message</p>
+                    <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-tertiary">
+                      {kb.firstMessage}
+                    </p>
+                  </div>
+                ) : null}
               </div>
               <footer className="mt-4 flex items-center justify-end gap-1 border-t border-slate-100 pt-4">
                 <button
@@ -170,6 +181,7 @@ function KnowledgeBaseModal({
   const [formData, setFormData] = useState({
     name: knowledgeBase?.name || '',
     prompt: knowledgeBase?.prompt || '',
+    firstMessage: knowledgeBase?.firstMessage || '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -250,6 +262,23 @@ function KnowledgeBaseModal({
             <p className="mt-1 text-xs text-tertiary">
               This prompt defines the avatar&apos;s behavior. Previous conversation summaries will be appended
               automatically.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-slate-600">
+              First message <span className="text-xs font-normal text-tertiary">(optional)</span>
+            </label>
+            <textarea
+              placeholder="e.g., Greet the guest and briefly explain what you can help with…"
+              value={formData.firstMessage}
+              onChange={(e) => setFormData({ ...formData, firstMessage: e.target.value })}
+              rows={4}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm leading-relaxed text-primary outline-none placeholder:text-tertiary focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20"
+            />
+            <p className="mt-1 text-xs text-tertiary">
+              Used as the instruction for the avatar&apos;s opening reply when this knowledge base is selected for a
+              meeting. If empty, the default greeting is used.
             </p>
           </div>
         </div>

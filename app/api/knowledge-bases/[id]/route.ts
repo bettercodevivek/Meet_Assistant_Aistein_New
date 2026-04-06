@@ -41,6 +41,7 @@ export async function GET(
         id: String(knowledgeBase._id),
         name: knowledgeBase.name,
         prompt: knowledgeBase.prompt,
+        firstMessage: knowledgeBase.firstMessage ?? '',
         createdAt: knowledgeBase.createdAt,
         updatedAt: knowledgeBase.updatedAt,
       },
@@ -72,7 +73,12 @@ export async function PUT(
     await connectDB();
     
     const { id } = await params;
-    const { name, prompt } = await request.json();
+    const body = await request.json();
+    const { name, prompt, firstMessage } = body as {
+      name?: unknown;
+      prompt?: unknown;
+      firstMessage?: unknown;
+    };
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -84,11 +90,14 @@ export async function PUT(
 
     const nameTrim = typeof name === 'string' ? name.trim() : '';
     const promptTrim = typeof prompt === 'string' ? prompt.trim() : '';
+    const firstMessageTrim =
+      typeof firstMessage === 'string' ? firstMessage.trim() : undefined;
     const knowledgeBase = await KnowledgeBase.findOneAndUpdate(
       { _id: id, userId: userOid },
       {
         ...(nameTrim ? { name: nameTrim } : {}),
         ...(promptTrim ? { prompt: promptTrim } : {}),
+        ...(firstMessageTrim !== undefined ? { firstMessage: firstMessageTrim } : {}),
         updatedAt: new Date(),
       },
       { new: true },
@@ -107,6 +116,7 @@ export async function PUT(
         id: String(knowledgeBase._id),
         name: knowledgeBase.name,
         prompt: knowledgeBase.prompt,
+        firstMessage: knowledgeBase.firstMessage ?? '',
         createdAt: knowledgeBase.createdAt,
         updatedAt: knowledgeBase.updatedAt,
       },
