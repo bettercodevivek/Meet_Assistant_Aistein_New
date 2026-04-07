@@ -42,12 +42,12 @@ export async function GET(
     const knowledgeBase = conversation.knowledgeBaseId ? {
       id: String((conversation.knowledgeBaseId as any)._id),
       name: (conversation.knowledgeBaseId as any).name,
-      welcomeMessage: (conversation.knowledgeBaseId as any).welcomeMessage,
+      firstMessage: (conversation.knowledgeBaseId as any).firstMessage ?? '',
       prompt: (conversation.knowledgeBaseId as any).prompt,
     } : {
       id: '',
       name: 'Deleted Knowledge Base',
-      welcomeMessage: '',
+      firstMessage: '',
       prompt: '',
     };
     
