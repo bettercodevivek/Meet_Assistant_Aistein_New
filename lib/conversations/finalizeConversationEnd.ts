@@ -85,14 +85,29 @@ export async function finalizeConversationEndById(
   if (meetingId) {
     const meeting = await Meeting.findById(meetingId);
     if (meeting) {
+      const activeForMeeting = await Conversation.countDocuments({
+        meetingId,
+        status: "active",
+      });
+      // Count runs after this conversation was marked completed — remaining actives are other guests.
+      const othersStillInMeeting = activeForMeeting > 0;
+
       if (meeting.status === "waiting" && meeting.sessionCount > 0) {
         await Meeting.findByIdAndUpdate(meetingId, {
           $set: { status: "active" },
         });
       }
+
       if (!meeting.isReusable) {
+        if (!othersStillInMeeting) {
+          await Meeting.findByIdAndUpdate(meetingId, {
+            $set: { status: "completed", isActive: false },
+          });
+        }
+      } else if (!othersStillInMeeting) {
         await Meeting.findByIdAndUpdate(meetingId, {
-          $set: { status: "completed", isActive: false },
+          $set: { status: "active" },
+          $unset: { roomTranscriptConversationId: "" },
         });
       } else {
         await Meeting.findByIdAndUpdate(meetingId, {

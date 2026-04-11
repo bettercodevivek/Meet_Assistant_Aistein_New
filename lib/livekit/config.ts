@@ -41,6 +41,11 @@ export function meetRoomNameForConversation(conversationId: string): string {
   return `meet-${conversationId}`;
 }
 
+/** One LiveKit room per meeting; all guests join here (Google Meet–style). */
+export function meetSharedRoomNameForMeeting(meetingMongoId: string): string {
+  return `meet-shared-${meetingMongoId}`;
+}
+
 /** Server-only fallback when meeting avatar is a HeyGen id without a stored LiveAvatar UUID. */
 export function livekitFallbackAvatarUuid(): string | null {
   const raw =

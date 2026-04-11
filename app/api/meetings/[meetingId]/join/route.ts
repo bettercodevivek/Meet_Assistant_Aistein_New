@@ -83,6 +83,16 @@ export async function POST(
 
     const existing = await Conversation.findOne(activeQuery).select('+guestAccessToken');
     if (existing?.guestAccessToken) {
+      await Meeting.updateOne(
+        {
+          _id: meeting._id,
+          $or: [
+            { roomTranscriptConversationId: { $exists: false } },
+            { roomTranscriptConversationId: null },
+          ],
+        },
+        { $set: { roomTranscriptConversationId: existing._id } },
+      );
       return NextResponse.json({
         success: true,
         reconnect: true,
@@ -131,6 +141,17 @@ export async function POST(
       title: `${meeting.title} — ${rawName}`,
       status: 'active',
     });
+
+    await Meeting.findOneAndUpdate(
+      {
+        _id: meeting._id,
+        $or: [
+          { roomTranscriptConversationId: { $exists: false } },
+          { roomTranscriptConversationId: null },
+        ],
+      },
+      { $set: { roomTranscriptConversationId: conversation._id } },
+    );
 
     await Meeting.findByIdAndUpdate(meeting._id, {
       $set: { status: 'active' },

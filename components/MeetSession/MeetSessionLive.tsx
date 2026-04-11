@@ -165,7 +165,9 @@ function MeetSessionRoomInner({
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-[#3C4043] bg-[#2C2C2E] p-6 shadow-xl">
             <h2 className="mb-2 text-lg font-semibold text-white">Leave meeting?</h2>
-            <p className="mb-6 text-sm text-[#9AA0A6]">You’ll disconnect from the host and your session will end.</p>
+            <p className="mb-6 text-sm text-[#9AA0A6]">
+              You’ll leave this call. Other guests can stay in the meeting with the host.
+            </p>
             <div className="flex gap-3">
               <button
                 type="button"

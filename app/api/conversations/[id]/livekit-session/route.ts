@@ -66,24 +66,45 @@ export async function POST(
     let resolvedLiveAvatarUuid =
       parseLiveAvatarAvatarUuid(conv.avatarId || null) || null;
     const mid = conv.meetingId;
-    if (!resolvedLiveAvatarUuid && mid) {
+    let meetingMongoId: string | null = null;
+    let transcriptConversationId = id;
+
+    if (mid) {
       const meetingId =
         typeof mid === 'object' && mid !== null && '_id' in mid
           ? String((mid as { _id: { toString(): string } })._id)
           : String(mid);
-      const meeting = await Meeting.findById(meetingId).select('liveAvatarAvatarUuid');
-      if (meeting?.liveAvatarAvatarUuid) {
+      meetingMongoId = meetingId;
+      const meetingDoc = await Meeting.findById(meetingId).select(
+        'liveAvatarAvatarUuid roomTranscriptConversationId',
+      );
+      if (meetingDoc?.roomTranscriptConversationId) {
+        transcriptConversationId = String(meetingDoc.roomTranscriptConversationId);
+      }
+      if (!resolvedLiveAvatarUuid && meetingDoc?.liveAvatarAvatarUuid) {
         resolvedLiveAvatarUuid =
-          parseLiveAvatarAvatarUuid(meeting.liveAvatarAvatarUuid) || resolvedLiveAvatarUuid;
+          parseLiveAvatarAvatarUuid(meetingDoc.liveAvatarAvatarUuid) || resolvedLiveAvatarUuid;
       }
     }
     if (!resolvedLiveAvatarUuid) {
       resolvedLiveAvatarUuid = livekitFallbackAvatarUuid();
     }
 
+    if (!meetingMongoId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'LiveKit meet sessions require a conversation linked to a meeting.',
+        },
+        { status: 400 },
+      );
+    }
+
     const session = await createMeetLiveKitSession({
-      conversationId: id,
-      guestName: guestName || 'Guest',
+      meetingMongoId,
+      transcriptConversationId,
+      participantIdentity: `guest-${id}`,
+      participantDisplayName: guestName || 'Guest',
       avatarId: conv.avatarId,
       liveAvatarAvatarUuid: resolvedLiveAvatarUuid,
       voiceId: conv.voiceId,
@@ -94,6 +115,7 @@ export async function POST(
 
     console.info('[MeetAssistant][LiveKit] livekit-session OK', {
       conversationId: id,
+      transcriptConversationId,
       roomName: session.roomName,
       serverUrl: session.serverUrl,
     });

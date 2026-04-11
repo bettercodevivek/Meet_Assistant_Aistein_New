@@ -17,6 +17,8 @@ export interface IMeeting extends Document {
   isReusable: boolean;
   maxSessions?: number;
   sessionCount: number;
+  /** First guest conversation id — shared LiveKit room + agent transcript for this meeting */
+  roomTranscriptConversationId?: mongoose.Types.ObjectId;
   expiresAt?: Date;
   settings: Record<string, unknown>;
   isActive: boolean;
@@ -77,6 +79,10 @@ const MeetingSchema = new Schema<IMeeting>(
     sessionCount: {
       type: Number,
       default: 0,
+    },
+    roomTranscriptConversationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Conversation',
     },
     expiresAt: {
       type: Date,

@@ -75,7 +75,16 @@ export function MeetLiveKitRoom({
   const [phase, setPhase] = useState<'connecting' | 'live' | 'failed'>('connecting');
   const [agentVideoReady, setAgentVideoReady] = useState(false);
   const [prepMessageIndex, setPrepMessageIndex] = useState(0);
+  const [otherGuests, setOtherGuests] = useState<RemoteParticipant[]>([]);
   const micMutedRef = useRef(false);
+
+  const refreshOtherGuests = useCallback(() => {
+    const r = roomRef.current;
+    if (!r) return;
+    setOtherGuests(
+      Array.from(r.remoteParticipants.values()).filter((p) => !isLikelyAgentParticipant(p)),
+    );
+  }, []);
 
   const showPrepOverlay =
     phase !== 'failed' && !error && (phase === 'connecting' || (phase === 'live' && !agentVideoReady));
@@ -163,6 +172,8 @@ export function MeetLiveKitRoom({
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.Reconnected, onReconnected);
     room.on(RoomEvent.TrackSubscribed, bindRemoteTrack);
+    room.on(RoomEvent.ParticipantConnected, refreshOtherGuests);
+    room.on(RoomEvent.ParticipantDisconnected, refreshOtherGuests);
 
     (async () => {
       try {
@@ -208,6 +219,7 @@ export function MeetLiveKitRoom({
         }
 
         setPhase('live');
+        refreshOtherGuests();
       } catch (e) {
         if (!cancelled) {
           console.error(e);
@@ -223,7 +235,10 @@ export function MeetLiveKitRoom({
       room.off(RoomEvent.Disconnected, onDisconnected);
       room.off(RoomEvent.Reconnected, onReconnected);
       room.off(RoomEvent.TrackSubscribed, bindRemoteTrack);
+      room.off(RoomEvent.ParticipantConnected, refreshOtherGuests);
+      room.off(RoomEvent.ParticipantDisconnected, refreshOtherGuests);
       room.disconnect();
+      setOtherGuests([]);
       roomRef.current = null;
       pushMicControls(false);
       if (videoRef.current) {
@@ -241,6 +256,7 @@ export function MeetLiveKitRoom({
     publishMic,
     streamLifecycleRef,
     pushMicControls,
+    refreshOtherGuests,
   ]);
 
   useEffect(() => {
@@ -290,6 +306,28 @@ export function MeetLiveKitRoom({
         muted={false}
       />
       <audio ref={audioRef} className="hidden" autoPlay />
+
+      {otherGuests.length > 0 ? (
+        <div
+          className="pointer-events-none absolute bottom-24 left-0 right-0 z-[25] flex justify-center px-4"
+          aria-label="Other participants"
+        >
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
+            {otherGuests.map((p) => (
+              <div
+                key={p.sid}
+                className="pointer-events-auto flex max-w-[10rem] items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur-sm"
+                title={p.identity}
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden />
+                <span className="truncate font-medium">
+                  {(p.name && p.name.trim()) || p.identity.replace(/^guest-/, '') || 'Guest'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {showPrepOverlay ? (
         <div

@@ -9,7 +9,7 @@ import {
   livekitCredentials,
   livekitHttpUrl,
   livekitWsUrl,
-  meetRoomNameForConversation,
+  meetSharedRoomNameForMeeting,
   PLATFORM_LIVEKIT_AGENT_NAME,
 } from '@/lib/livekit/config';
 import { parseLiveAvatarAvatarUuid } from '@/lib/livekit/liveAvatarAvatarId';
@@ -31,8 +31,13 @@ const MAX_KB_METADATA_CHARS = 28_000;
 const MAX_KB_FIRST_MESSAGE_CHARS = 8_000;
 
 export async function createMeetLiveKitSession(options: {
-  conversationId: string;
-  guestName: string;
+  /** MongoDB Meeting `_id` — one shared room for all guests */
+  meetingMongoId: string;
+  /** Conversation id for agent transcript + Mongo (typically first joiner’s conversation) */
+  transcriptConversationId: string;
+  /** Unique LiveKit identity for this guest */
+  participantIdentity: string;
+  participantDisplayName: string;
   avatarId?: string;
   /** Resolved LiveAvatar UUID (meeting override or parsed avatarId). */
   liveAvatarAvatarUuid?: string | null;
@@ -54,8 +59,10 @@ export async function createMeetLiveKitSession(options: {
   }
 
   const {
-    conversationId,
-    guestName,
+    meetingMongoId,
+    transcriptConversationId,
+    participantIdentity,
+    participantDisplayName,
     avatarId,
     liveAvatarAvatarUuid,
     voiceId,
@@ -63,9 +70,9 @@ export async function createMeetLiveKitSession(options: {
     knowledgeBasePrompt,
     knowledgeBaseFirstMessage,
   } = options;
-  const roomName = meetRoomNameForConversation(conversationId);
+  const roomName = meetSharedRoomNameForMeeting(meetingMongoId);
 
-  const metaPayload: Record<string, string> = { conversationId };
+  const metaPayload: Record<string, string> = { conversationId: transcriptConversationId };
   const aidRaw = avatarId?.trim();
   const aid =
     parseLiveAvatarAvatarUuid(liveAvatarAvatarUuid ?? null) ??
@@ -106,7 +113,7 @@ export async function createMeetLiveKitSession(options: {
     await roomService.createRoom({
       name: roomName,
       emptyTimeout: 600,
-      maxParticipants: 12,
+      maxParticipants: 24,
       agents: [
         new RoomAgentDispatch({
           agentName: PLATFORM_LIVEKIT_AGENT_NAME,
@@ -139,17 +146,18 @@ export async function createMeetLiveKitSession(options: {
     roomName,
     agentName: PLATFORM_LIVEKIT_AGENT_NAME,
     agentDispatchMetadata: metadata,
-    conversationId,
+    transcriptConversationId,
+    meetingMongoId,
     avatarId: aid ?? null,
     avatarIdOmittedNonUuid: aidRaw && !aid ? aidRaw.slice(0, 80) : null,
-    guestDisplayName: guestName.trim() || 'Guest',
-    guestIdentity: `guest-${conversationId}`,
+    guestDisplayName: participantDisplayName.trim() || 'Guest',
+    guestIdentity: participantIdentity,
     agentDispatchOutcome,
   });
 
   const at = new AccessToken(creds.apiKey, creds.apiSecret, {
-    identity: `guest-${conversationId}`,
-    name: guestName.trim() || 'Guest',
+    identity: participantIdentity,
+    name: participantDisplayName.trim() || 'Guest',
     ttl: '2h',
   });
   at.addGrant({
