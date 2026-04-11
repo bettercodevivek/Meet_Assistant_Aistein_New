@@ -28,7 +28,7 @@ export function MeetSessionTopBar({
   return (
     <header className="fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between bg-transparent px-4 sm:px-6">
       <div className="min-w-0 flex-1 pr-4">
-        <h1 className="truncate text-sm font-medium text-white">{title}</h1>
+        <h1 className="truncate text-sm font-medium text-white/90">{title}</h1>
       </div>
       <time
         className="shrink-0 font-mono text-sm tabular-nums text-[#9AA0A6]"

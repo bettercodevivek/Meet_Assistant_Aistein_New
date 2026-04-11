@@ -29,7 +29,7 @@ export function MeetLiveCaptionsBar({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8ab4f8] mr-2">
             {row.label}
           </span>
-          <span className="text-sm text-white leading-snug">{row.text}</span>
+          <span className="line-clamp-2 text-sm leading-snug text-white">{row.text}</span>
         </div>
       ))}
     </div>

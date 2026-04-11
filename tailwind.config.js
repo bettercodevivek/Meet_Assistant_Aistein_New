@@ -1,5 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  plugins: [
+    function motionReducePlugin({ addVariant }) {
+      addVariant('motion-reduce', '@media (prefers-reduced-motion: reduce)');
+    },
+  ],
   content: [
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',

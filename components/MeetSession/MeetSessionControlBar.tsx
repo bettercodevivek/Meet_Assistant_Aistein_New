@@ -2,15 +2,6 @@
 
 import { MessageSquare, Mic, MicOff, PhoneOff, Settings, Subtitles, Video, VideoOff } from 'lucide-react';
 
-function lightenHex(hex: string, pct: number) {
-  const n = hex.replace('#', '');
-  const num = parseInt(n, 16);
-  const r = Math.min(255, ((num >> 16) & 0xff) + Math.round(255 * pct));
-  const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * pct));
-  const b = Math.min(255, (num & 0xff) + Math.round(255 * pct));
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-}
-
 export type MeetSessionMicProps = {
   muted: boolean;
   active: boolean;
@@ -44,129 +35,97 @@ export function MeetSessionControlBar({
   };
 
   const micOn = !mic.muted && mic.active;
-  const micBg = micOn ? '#3C4043' : '#EA4335';
-  const micHover = micOn ? lightenHex('#3C4043', 0.1) : lightenHex('#EA4335', 0.1);
+
+  const circleBase =
+    'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12';
+
+  const inactiveCircle = 'bg-[#3C4043] hover:bg-[#4a4d51]';
+  const selectedCircle = 'bg-[#8AB4F8] text-[#202124] hover:bg-[#9ec0fa]';
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center justify-center gap-2 px-3 sm:gap-3 md:gap-3">
-      <button
-        type="button"
-        title={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
-        aria-label={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
-        aria-pressed={micOn}
-        style={{ backgroundColor: micBg }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = micHover;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = micBg;
-        }}
-        onClick={toggleMic}
-        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
-      >
-        {mic.muted ? (
-          <MicOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-        ) : (
-          <Mic className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-        )}
-      </button>
+    <div className="fixed bottom-0 left-0 right-0 z-40 flex items-end justify-center px-3 pb-4 pt-2 sm:px-4">
+      <div className="flex max-w-full flex-wrap items-center justify-center gap-2 sm:gap-3">
+        {/* Meet-style clustered controls */}
+        <div
+          className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#2d2e31] px-2 py-2 shadow-[0_4px_24px_rgba(0,0,0,0.45)] sm:gap-2 sm:px-3"
+          role="toolbar"
+          aria-label="Meeting controls"
+        >
+          <button
+            type="button"
+            title={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-label={mic.muted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-pressed={micOn}
+            onClick={toggleMic}
+            className={`${circleBase} ${micOn ? inactiveCircle : 'bg-[#EA4335] hover:bg-[#f05449]'}`}
+          >
+            {mic.muted ? (
+              <MicOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+            ) : (
+              <Mic className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+            )}
+          </button>
 
-      <button
-        type="button"
-        title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
-        aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}
-        aria-pressed={cameraOn}
-        style={{ backgroundColor: cameraOn ? '#1A73E8' : '#3C4043' }}
-        onMouseEnter={(e) => {
-          const base = cameraOn ? '#1A73E8' : '#3C4043';
-          e.currentTarget.style.backgroundColor = lightenHex(base, 0.1);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = cameraOn ? '#1A73E8' : '#3C4043';
-        }}
-        onClick={onCameraToggle}
-        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
-      >
-        {cameraOn ? (
-          <Video className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-        ) : (
-          <VideoOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-        )}
-      </button>
+          <button
+            type="button"
+            title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+            aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+            aria-pressed={cameraOn}
+            onClick={onCameraToggle}
+            className={`${circleBase} ${cameraOn ? 'bg-[#1A73E8] hover:bg-[#1967d2]' : inactiveCircle}`}
+          >
+            {cameraOn ? (
+              <Video className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+            ) : (
+              <VideoOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+            )}
+          </button>
 
-      <button
-        type="button"
-        title="Leave call"
-        aria-label="Leave call"
-        style={{ backgroundColor: '#EA4335' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = lightenHex('#EA4335', 0.1);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = '#EA4335';
-        }}
-        onClick={onEndCall}
-        className="flex h-10 items-center justify-center rounded-full px-6 text-white transition-colors sm:h-12 sm:px-8"
-      >
-        <PhoneOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-      </button>
+          <button
+            type="button"
+            title="Transcript"
+            aria-label="Toggle transcript"
+            aria-pressed={chatOpen}
+            onClick={onChatToggle}
+            className={`${circleBase} ${chatOpen ? selectedCircle : inactiveCircle}`}
+          >
+            <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+          </button>
 
-      <button
-        type="button"
-        title="Transcript"
-        aria-label="Toggle transcript"
-        aria-pressed={chatOpen}
-        style={{
-          backgroundColor: chatOpen ? '#8AB4F8' : '#3C4043',
-          color: chatOpen ? '#202124' : '#ffffff',
-        }}
-        onMouseEnter={(e) => {
-          const base = chatOpen ? '#8AB4F8' : '#3C4043';
-          e.currentTarget.style.backgroundColor = lightenHex(base, 0.1);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = chatOpen ? '#8AB4F8' : '#3C4043';
-        }}
-        onClick={onChatToggle}
-        className="flex h-10 w-10 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12"
-      >
-        <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-      </button>
+          <button
+            type="button"
+            title="Turn on captions"
+            aria-label="Toggle captions"
+            aria-pressed={captionsOn}
+            onClick={onCaptionsToggle}
+            className={`${circleBase} ${captionsOn ? selectedCircle : inactiveCircle}`}
+          >
+            <Subtitles className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+          </button>
 
-      <button
-        type="button"
-        title="Captions"
-        aria-label="Toggle captions"
-        aria-pressed={captionsOn}
-        style={{ backgroundColor: '#3C4043' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = lightenHex('#3C4043', 0.1);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = '#3C4043';
-        }}
-        onClick={onCaptionsToggle}
-        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
-      >
-        <Subtitles className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-      </button>
+          <button
+            type="button"
+            title="Settings"
+            aria-label="Meeting settings"
+            onClick={onSettingsOpen}
+            className={`${circleBase} ${inactiveCircle}`}
+          >
+            <Settings className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+          </button>
+        </div>
 
-      <button
-        type="button"
-        title="Settings"
-        aria-label="Meeting settings"
-        style={{ backgroundColor: '#3C4043' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = lightenHex('#3C4043', 0.1);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = '#3C4043';
-        }}
-        onClick={onSettingsOpen}
-        className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors sm:h-12 sm:w-12"
-      >
-        <Settings className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
-      </button>
+        {/* Prominent leave control — Meet-style red pill */}
+        <button
+          type="button"
+          title="Leave call"
+          aria-label="Leave call"
+          onClick={onEndCall}
+          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-[#EA4335] px-5 text-sm font-medium text-white shadow-[0_4px_16px_rgba(234,67,53,0.35)] transition-colors hover:bg-[#f05449] sm:h-12 sm:px-7"
+        >
+          <PhoneOff className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.75} />
+          <span className="hidden pr-0.5 sm:inline">Leave</span>
+        </button>
+      </div>
     </div>
   );
 }

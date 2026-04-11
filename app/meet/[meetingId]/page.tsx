@@ -10,6 +10,7 @@ import { MeetSessionLeftScreen } from '@/components/MeetSession/MeetSessionLeftS
 type LobbyMeeting = {
   title: string;
   avatarId: string;
+  liveAvatarAvatarUuid?: string | null;
   status: string;
   isValid: boolean;
 };
@@ -28,6 +29,9 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
   const [conversationId, setConversationId] = useState('');
   const [sessionLoading, setSessionLoading] = useState(false);
   const [leftMeta, setLeftMeta] = useState<{ durationMs: number; canRejoin: boolean } | null>(null);
+  const [lobbyMicStream, setLobbyMicStream] = useState<MediaStream | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarHostName, setAvatarHostName] = useState<string | null>(null);
 
   const guestTokenRef = useRef<string | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -79,16 +83,51 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
     void fetchMeetingMeta();
   }, [fetchMeetingMeta]);
 
+  useEffect(() => {
+    const uuid = lobbyMeeting?.liveAvatarAvatarUuid?.trim();
+    if (!uuid || phase !== 'lobby') {
+      setAvatarPreviewUrl(null);
+      setAvatarHostName(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/public/avatar-preview?uuid=${encodeURIComponent(uuid)}`)
+      .then((r) => r.json())
+      .then(
+        (data: {
+          success?: boolean;
+          previewUrl?: string | null;
+          name?: string | null;
+        }) => {
+          if (cancelled) return;
+          setAvatarPreviewUrl(typeof data.previewUrl === 'string' ? data.previewUrl : null);
+          setAvatarHostName(typeof data.name === 'string' ? data.name : null);
+        },
+      )
+      .catch(() => {
+        if (!cancelled) {
+          setAvatarPreviewUrl(null);
+          setAvatarHostName(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lobbyMeeting?.liveAvatarAvatarUuid, phase]);
+
   const requestMicrophone = async () => {
     setMicStatus('pending');
     setJoinError(null);
     try {
       micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      setLobbyMicStream(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
+      setLobbyMicStream(stream);
       setMicStatus('granted');
     } catch {
       setMicStatus('denied');
+      setLobbyMicStream(null);
       setJoinError('Microphone access is required to join the voice session.');
     }
   };
@@ -336,10 +375,11 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
 
   if (phase === 'invalid' || (lobbyMeeting && !lobbyMeeting.isValid && phase !== 'session')) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#202124] text-white px-6">
-        <h1 className="text-2xl font-medium mb-2">You can&apos;t join this call</h1>
-        <p className="text-gray-400 text-center max-w-md">
-          This link may have expired, reached its session limit, or been deactivated by the host.
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#202124] px-6 text-white">
+        <h1 className="mb-3 text-center text-2xl font-medium">You can&apos;t join this call</h1>
+        <p className="max-w-md text-center text-[15px] leading-relaxed text-[#9AA0A6]">
+          This link may have expired, reached its guest limit, or been turned off by the host. Ask for a new invite or
+          check that you&apos;re using the correct URL.
         </p>
       </div>
     );
@@ -350,6 +390,8 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
       <MeetSessionLobby
         meetingTitle={lobbyMeeting.title}
         avatarId={lobbyMeeting.avatarId}
+        avatarPreviewUrl={avatarPreviewUrl}
+        avatarHostName={avatarHostName}
         guestName={guestName}
         onGuestNameChange={setGuestName}
         micStatus={micStatus}
@@ -358,6 +400,7 @@ export default function PublicMeetPage({ params }: { params: Promise<{ meetingId
         joining={joining}
         onJoin={() => void startSession()}
         canJoin={lobbyMeeting.isValid}
+        micStream={lobbyMicStream}
       />
     );
   }

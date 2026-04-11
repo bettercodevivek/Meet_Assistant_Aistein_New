@@ -10,8 +10,16 @@ import { MeetLiveKitRoom, type MeetMicControls } from '@/components/MeetSession/
 import { MeetSessionTopBar } from './MeetSessionTopBar';
 import { MeetSessionControlBar } from './MeetSessionControlBar';
 import { MeetSessionChatPanel, type LiveMessage } from './MeetSessionChatPanel';
-import { MeetSessionSelfView } from './MeetSessionSelfView';
+import { MeetLocalParticipantTile } from './MeetLocalParticipantTile';
 import { MeetSessionSettingsModal } from './MeetSessionSettingsModal';
+import { MeetLiveCaptionsBar } from './MeetLiveCaptionsBar';
+
+function lastMessageContent(messages: LiveMessage[], role: 'user' | 'assistant'): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === role) return messages[i].content;
+  }
+  return '';
+}
 
 function MeetSessionRoomInner({
   conversation,
@@ -90,6 +98,36 @@ function MeetSessionRoomInner({
     setMessages(conversation.messages || []);
   }, [conversation.id, conversation.messages]);
 
+  useEffect(() => {
+    if (!guestToken.trim() || !conversation.id) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}/messages`, {
+          headers: { 'x-guest-token': guestToken },
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          success?: boolean;
+          messages?: LiveMessage[];
+        };
+        if (!data.success || !Array.isArray(data.messages) || cancelled) return;
+        setMessages(data.messages);
+      } catch {
+        /* ignore transient network errors */
+      }
+    };
+    void poll();
+    const id = window.setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [conversation.id, guestToken]);
+
+  const captionUserText = useMemo(() => lastMessageContent(messages, 'user'), [messages]);
+  const captionAvatarText = useMemo(() => lastMessageContent(messages, 'assistant'), [messages]);
+
   const micForBar = useMemo(
     () => ({
       muted: micControls.muted,
@@ -113,14 +151,26 @@ function MeetSessionRoomInner({
               micStream={micStream}
               streamLifecycleRef={streamLifecycleRef}
               setMicControls={setMicControls}
-            />
+              hostDisplayName={hostLabel}
+            >
+              <MeetLocalParticipantTile
+                audioStream={micStream}
+                cameraStream={cameraStream}
+                guestName={guestName}
+                isMuted={micControls.muted}
+              />
+            </MeetLiveKitRoom>
 
-            <MeetSessionSelfView
-              audioStream={micStream}
-              cameraStream={cameraStream}
-              guestName={guestName}
-              isMuted={micControls.muted}
-            />
+            {captionsOn ? (
+              <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-[38] flex justify-center px-4 sm:bottom-32">
+                <MeetLiveCaptionsBar
+                  guestLabel={guestLabel}
+                  hostLabel={hostLabel}
+                  userText={captionUserText}
+                  avatarText={captionAvatarText}
+                />
+              </div>
+            ) : null}
 
             {recoveringStream && (
               <div className="pointer-events-none absolute inset-0 z-[40] flex items-center justify-center bg-black/35">

@@ -1,6 +1,6 @@
 'use client';
 
-import type { MutableRefObject } from 'react';
+import type { MutableRefObject, ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
@@ -15,6 +15,7 @@ import {
 
 import type { AvatarStreamLifecycleHandlers } from '@/components/logic';
 import type { SessionConversation } from '@/components/meeting/sessionTypes';
+import { MeetParticipantTile } from '@/components/MeetSession/MeetParticipantTile';
 
 /** Shown while connecting and until the agent publishes video (can be 10–15+ seconds). */
 const MEET_PREP_MESSAGES = [
@@ -50,6 +51,60 @@ function isLikelyAgentParticipant(p: RemoteParticipant): boolean {
   return id.includes('agent') || id.startsWith('lk-agent');
 }
 
+function RemoteGuestTile({
+  participant,
+  onVideoRef,
+  onAudioRef,
+}: {
+  participant: RemoteParticipant;
+  onVideoRef: (sid: string, el: HTMLVideoElement | null) => void;
+  onAudioRef: (sid: string, el: HTMLAudioElement | null) => void;
+}) {
+  const vRef = useCallback(
+    (el: HTMLVideoElement | null) => {
+      onVideoRef(participant.sid, el);
+    },
+    [participant.sid, onVideoRef],
+  );
+  const aRef = useCallback(
+    (el: HTMLAudioElement | null) => {
+      onAudioRef(participant.sid, el);
+    },
+    [participant.sid, onAudioRef],
+  );
+
+  const displayName =
+    (participant.name && participant.name.trim()) ||
+    participant.identity.replace(/^guest-/, '') ||
+    'Guest';
+
+  const initial = displayName.charAt(0).toUpperCase() || '?';
+  const cameraOn = participant.isCameraEnabled;
+
+  return (
+    <MeetParticipantTile name={displayName} className="h-full min-h-[200px] flex-col">
+      <div className="relative h-full min-h-[200px] w-full bg-[#202124]">
+        {cameraOn ? (
+          <video
+            ref={vRef}
+            className="h-full w-full object-cover"
+            playsInline
+            autoPlay
+            muted
+          />
+        ) : (
+          <div className="flex h-full min-h-[200px] w-full flex-col items-center justify-center bg-[#3c4043]">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#5f6368] text-2xl font-medium text-white">
+              {initial}
+            </div>
+          </div>
+        )}
+        <audio ref={aRef} className="hidden" autoPlay />
+      </div>
+    </MeetParticipantTile>
+  );
+}
+
 export function MeetLiveKitRoom({
   conversation,
   guestToken,
@@ -57,6 +112,8 @@ export function MeetLiveKitRoom({
   micStream,
   streamLifecycleRef,
   setMicControls,
+  hostDisplayName = 'Host',
+  children,
 }: {
   conversation: SessionConversation;
   guestToken: string;
@@ -64,6 +121,10 @@ export function MeetLiveKitRoom({
   micStream: MediaStream | null;
   streamLifecycleRef: MutableRefObject<AvatarStreamLifecycleHandlers>;
   setMicControls: (c: MeetMicControls) => void;
+  /** Label on the AI host tile (Meet-style bottom-left). */
+  hostDisplayName?: string;
+  /** Local participant tile (you) — rendered as the last tile in the grid. */
+  children?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -71,11 +132,16 @@ export function MeetLiveKitRoom({
   const micStreamRef = useRef(micStream);
   micStreamRef.current = micStream;
 
+  const guestVideoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const guestAudioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'connecting' | 'live' | 'failed'>('connecting');
   const [agentVideoReady, setAgentVideoReady] = useState(false);
   const [prepMessageIndex, setPrepMessageIndex] = useState(0);
   const [otherGuests, setOtherGuests] = useState<RemoteParticipant[]>([]);
+  /** Bumped when remote guests publish/unpublish camera so tiles re-read `isCameraEnabled`. */
+  const [, setGuestUiEpoch] = useState(0);
   const micMutedRef = useRef(false);
 
   const refreshOtherGuests = useCallback(() => {
@@ -84,6 +150,40 @@ export function MeetLiveKitRoom({
     setOtherGuests(
       Array.from(r.remoteParticipants.values()).filter((p) => !isLikelyAgentParticipant(p)),
     );
+  }, []);
+
+  const registerGuestVideo = useCallback((sid: string, el: HTMLVideoElement | null) => {
+    const room = roomRef.current;
+    if (el) {
+      guestVideoElsRef.current.set(sid, el);
+      if (!room) return;
+      const p = Array.from(room.remoteParticipants.values()).find((x) => x.sid === sid);
+      if (!p) return;
+      Array.from(p.trackPublications.values()).forEach((pub) => {
+        if (pub.track && pub.kind === Track.Kind.Video) {
+          attachVideo(pub.track as RemoteTrack, el);
+        }
+      });
+    } else {
+      guestVideoElsRef.current.delete(sid);
+    }
+  }, []);
+
+  const registerGuestAudio = useCallback((sid: string, el: HTMLAudioElement | null) => {
+    const room = roomRef.current;
+    if (el) {
+      guestAudioElsRef.current.set(sid, el);
+      if (!room) return;
+      const p = Array.from(room.remoteParticipants.values()).find((x) => x.sid === sid);
+      if (!p) return;
+      Array.from(p.trackPublications.values()).forEach((pub) => {
+        if (pub.track && pub.kind === Track.Kind.Audio) {
+          attachAudio(pub.track as RemoteTrack, el);
+        }
+      });
+    } else {
+      guestAudioElsRef.current.delete(sid);
+    }
   }, []);
 
   const showPrepOverlay =
@@ -112,21 +212,32 @@ export function MeetLiveKitRoom({
 
   const bindRemoteTrack = useCallback(
     (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
-      if (!isLikelyAgentParticipant(participant)) return;
-      if (track.kind === Track.Kind.Video) {
-        attachVideo(track, videoRef.current);
-        const el = videoRef.current;
-        if (el) {
-          const onReady = () => markAgentVideoReady();
-          if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            onReady();
-          } else {
-            el.addEventListener('loadeddata', onReady, { once: true });
+      if (isLikelyAgentParticipant(participant)) {
+        if (track.kind === Track.Kind.Video) {
+          attachVideo(track, videoRef.current);
+          const el = videoRef.current;
+          if (el) {
+            const onReady = () => markAgentVideoReady();
+            if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+              onReady();
+            } else {
+              el.addEventListener('loadeddata', onReady, { once: true });
+            }
           }
         }
+        if (track.kind === Track.Kind.Audio) {
+          attachAudio(track, audioRef.current);
+        }
+        return;
+      }
+
+      if (track.kind === Track.Kind.Video) {
+        const el = guestVideoElsRef.current.get(participant.sid);
+        if (el) attachVideo(track, el);
       }
       if (track.kind === Track.Kind.Audio) {
-        attachAudio(track, audioRef.current);
+        const el = guestAudioElsRef.current.get(participant.sid);
+        if (el) attachAudio(track, el);
       }
     },
     [markAgentVideoReady],
@@ -134,8 +245,8 @@ export function MeetLiveKitRoom({
 
   const publishMic = useCallback(async (room: Room) => {
     const stream = micStreamRef.current;
-    const track = stream?.getAudioTracks()[0];
-    if (!track) return;
+    const t = stream?.getAudioTracks()[0];
+    if (!t) return;
     const existing = Array.from(room.localParticipant.audioTrackPublications.values()).filter(
       (p) => p.source === Track.Source.Microphone,
     );
@@ -144,7 +255,7 @@ export function MeetLiveKitRoom({
         await room.localParticipant.unpublishTrack(pub.track);
       }
     }
-    const pub = await room.localParticipant.publishTrack(track, {
+    const pub = await room.localParticipant.publishTrack(t, {
       source: Track.Source.Microphone,
     });
     if (micMutedRef.current) {
@@ -169,9 +280,22 @@ export function MeetLiveKitRoom({
       streamLifecycleRef.current.onStreamConnected?.();
     };
 
+    const bumpGuestTiles = () => setGuestUiEpoch((e) => e + 1);
+
+    const onTrackPublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      void publication;
+      if (!isLikelyAgentParticipant(participant)) bumpGuestTiles();
+    };
+    const onTrackUnpublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      void publication;
+      if (!isLikelyAgentParticipant(participant)) bumpGuestTiles();
+    };
+
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.Reconnected, onReconnected);
     room.on(RoomEvent.TrackSubscribed, bindRemoteTrack);
+    room.on(RoomEvent.TrackPublished, onTrackPublished);
+    room.on(RoomEvent.TrackUnpublished, onTrackUnpublished);
     room.on(RoomEvent.ParticipantConnected, refreshOtherGuests);
     room.on(RoomEvent.ParticipantDisconnected, refreshOtherGuests);
 
@@ -235,11 +359,15 @@ export function MeetLiveKitRoom({
       room.off(RoomEvent.Disconnected, onDisconnected);
       room.off(RoomEvent.Reconnected, onReconnected);
       room.off(RoomEvent.TrackSubscribed, bindRemoteTrack);
+      room.off(RoomEvent.TrackPublished, onTrackPublished);
+      room.off(RoomEvent.TrackUnpublished, onTrackUnpublished);
       room.off(RoomEvent.ParticipantConnected, refreshOtherGuests);
       room.off(RoomEvent.ParticipantDisconnected, refreshOtherGuests);
       room.disconnect();
       setOtherGuests([]);
       roomRef.current = null;
+      guestVideoElsRef.current.clear();
+      guestAudioElsRef.current.clear();
       pushMicControls(false);
       if (videoRef.current) {
         videoRef.current.srcObject = null;
@@ -286,48 +414,54 @@ export function MeetLiveKitRoom({
   if (error || phase === 'failed') {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-lg font-medium text-white">Couldn&apos;t join LiveKit</p>
-        <p className="max-w-md text-sm text-[#9AA0A6]">{error}</p>
-        <p className="max-w-md text-xs text-[#9AA0A6]">
-          Ensure LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET are set on the server and the
-          Liveavatar worker is running with the same project.
+        <p className="text-lg font-medium text-white">Couldn&apos;t connect to this meeting</p>
+        <p className="max-w-md text-sm leading-relaxed text-[#9AA0A6]">
+          Something went wrong starting the video session. Check your internet connection and try joining again. If the
+          problem continues, ask the host to verify the meeting is active.
         </p>
+        <details className="max-w-md text-left text-xs text-[#9AA0A6]/80">
+          <summary className="cursor-pointer select-none text-[#8AB4F8] hover:underline">Technical details</summary>
+          <p className="mt-2 font-mono text-[11px] break-words text-[#9AA0A6]">{error}</p>
+          <p className="mt-2">
+            Hosts: ensure LiveKit env vars are set and the Liveavatar worker matches this project.
+          </p>
+        </details>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center bg-black">
-      <video
-        ref={videoRef}
-        className="max-h-full max-w-full object-contain"
-        playsInline
-        autoPlay
-        muted={false}
-      />
-      <audio ref={audioRef} className="hidden" autoPlay />
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-black">
+      <div className="mx-auto grid h-full min-h-0 w-full max-w-[1600px] content-start gap-3 overflow-y-auto p-3 [grid-auto-rows:minmax(200px,1fr)] [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]">
+        <MeetParticipantTile name={hostDisplayName} className="h-full min-h-[200px] flex-col">
+          <video
+            ref={videoRef}
+            className="h-full min-h-[200px] w-full object-cover"
+            playsInline
+            autoPlay
+            muted={false}
+          />
+        </MeetParticipantTile>
 
-      {otherGuests.length > 0 ? (
-        <div
-          className="pointer-events-none absolute bottom-24 left-0 right-0 z-[25] flex justify-center px-4"
-          aria-label="Other participants"
-        >
-          <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
-            {otherGuests.map((p) => (
-              <div
-                key={p.sid}
-                className="pointer-events-auto flex max-w-[10rem] items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur-sm"
-                title={p.identity}
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden />
-                <span className="truncate font-medium">
-                  {(p.name && p.name.trim()) || p.identity.replace(/^guest-/, '') || 'Guest'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+        {[...otherGuests]
+          .sort((a, b) => {
+            const na = ((a.name && a.name.trim()) || a.identity || '').toLowerCase();
+            const nb = ((b.name && b.name.trim()) || b.identity || '').toLowerCase();
+            return na.localeCompare(nb);
+          })
+          .map((p) => (
+            <RemoteGuestTile
+              key={p.sid}
+              participant={p}
+              onVideoRef={registerGuestVideo}
+              onAudioRef={registerGuestAudio}
+            />
+          ))}
+
+        {children}
+      </div>
+
+      <audio ref={audioRef} className="hidden" autoPlay />
 
       {showPrepOverlay ? (
         <div

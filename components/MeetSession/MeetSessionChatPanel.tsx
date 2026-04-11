@@ -81,7 +81,7 @@ export function MeetSessionChatPanel({
       <aside
         className={[
           'fixed right-0 top-14 z-[35] flex w-full max-w-[360px] flex-col border-l border-[#3C4043] bg-[#2C2C2E] shadow-xl transition-transform duration-300 ease-out',
-          'bottom-20',
+          'bottom-28',
           open ? 'translate-x-0' : 'translate-x-full',
         ].join(' ')}
       >
