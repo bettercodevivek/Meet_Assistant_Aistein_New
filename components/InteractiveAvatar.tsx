@@ -469,7 +469,7 @@ export function MeetConversationAvatar({
             <div className={videoWrap}>
               <AvatarVideo
                 ref={mediaStream}
-                objectFit={isMeet ? "cover" : "contain"}
+                objectFit="contain"
               />
               {variant === "dashboard" && (
                 <div className="absolute bottom-6 right-6 w-48 h-36 bg-gray-900 rounded-xl overflow-hidden shadow-2xl border-2 border-gray-700">

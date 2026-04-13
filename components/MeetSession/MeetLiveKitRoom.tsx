@@ -436,7 +436,7 @@ export function MeetLiveKitRoom({
         <MeetParticipantTile name={hostDisplayName} className="h-full min-h-[200px] flex-col">
           <video
             ref={videoRef}
-            className="h-full min-h-[200px] w-full object-cover"
+            className="h-full min-h-[200px] w-full object-contain"
             playsInline
             autoPlay
             muted={false}
