@@ -7,11 +7,12 @@ import { authUserObjectId } from '@/lib/auth/userObjectId';
 // GET agent by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     await connectDB();
+    const { id } = await params;
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -22,7 +23,7 @@ export async function GET(
     }
 
     const agent = await Agent.findOne({
-      _id: params.id,
+      _id: id,
       userId: userOid,
     });
 

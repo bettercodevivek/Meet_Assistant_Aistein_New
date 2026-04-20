@@ -1,5 +1,5 @@
 interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   timestamp: string;
 }
@@ -7,16 +7,19 @@ interface Message {
 /**
  * Generates a conversation summary from a list of messages using OpenAI
  */
-export async function generateConversationSummary(messages: Message[]): Promise<string> {
+export async function generateConversationSummary(
+  messages: Message[],
+): Promise<string> {
   if (messages.length === 0) {
-    return '';
+    return "";
   }
 
   const openaiApiKey = process.env.OPENAI_API_KEY;
-  
+
   // Fallback to template-based summary if no OpenAI key
   if (!openaiApiKey) {
-    console.warn('OPENAI_API_KEY not found, using template-based summary');
+    console.warn("OPENAI_API_KEY not found, using template-based summary");
+
     return generateTemplateSummary(messages);
   }
 
@@ -24,32 +27,34 @@ export async function generateConversationSummary(messages: Message[]): Promise<
     // Get first and last message timestamps
     const startTime = new Date(messages[0].timestamp);
     const endTime = new Date(messages[messages.length - 1].timestamp);
-    const duration = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+    const duration = Math.round(
+      (endTime.getTime() - startTime.getTime()) / 60000,
+    );
 
     // Prepare conversation for OpenAI
     const conversationText = messages
-      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
 
     // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiApiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: "gpt-3.5-turbo",
         messages: [
           {
-            role: 'system',
+            role: "system",
             content: `You are a helpful assistant that creates concise conversation summaries. 
 Your task is to analyze the conversation and create a summary that will help continue the conversation naturally.
 Focus on: key topics discussed, decisions made, user preferences, and important context.
 Keep the summary under 300 words and format it clearly.`,
           },
           {
-            role: 'user',
+            role: "user",
             content: `Please create a summary of this conversation that can be used to continue it later:
 
 ${conversationText}
@@ -72,16 +77,18 @@ Continue this conversation naturally, referring to the above context when releva
     });
 
     if (!response.ok) {
-      console.error('OpenAI API error:', response.status, response.statusText);
+      console.error("OpenAI API error:", response.status, response.statusText);
+
       return generateTemplateSummary(messages);
     }
 
     const data = await response.json();
-    const summary = data.choices[0]?.message?.content || '';
+    const summary = data.choices[0]?.message?.content || "";
 
     return summary || generateTemplateSummary(messages);
   } catch (error) {
-    console.error('Error generating AI summary:', error);
+    console.error("Error generating AI summary:", error);
+
     return generateTemplateSummary(messages);
   }
 }
@@ -90,17 +97,17 @@ Continue this conversation naturally, referring to the above context when releva
  * Fallback template-based summary generation
  */
 function generateTemplateSummary(messages: Message[]): string {
-  const userMessages = messages.filter(m => m.role === 'user');
-  const assistantMessages = messages.filter(m => m.role === 'assistant');
-  
+  const userMessages = messages.filter((m) => m.role === "user");
+  const assistantMessages = messages.filter((m) => m.role === "assistant");
+
   // Extract topics (simple keyword extraction)
-  const allContent = messages.map(m => m.content).join(' ');
+  const allContent = messages.map((m) => m.content).join(" ");
   const topics = extractKeyTopics(allContent);
-  
+
   // Get first and last message timestamps
   const startTime = new Date(messages[0].timestamp);
   const endTime = new Date(messages[messages.length - 1].timestamp);
-  
+
   // Build summary
   const summary = `=== CONVERSATION CONTEXT ===
 Date: ${startTime.toLocaleDateString()}
@@ -108,7 +115,7 @@ Duration: ${Math.round((endTime.getTime() - startTime.getTime()) / 60000)} minut
 Messages exchanged: ${messages.length} (${userMessages.length} from user, ${assistantMessages.length} from assistant)
 
 Key Topics Discussed:
-${topics.map(t => `- ${t}`).join('\n')}
+${topics.map((t) => `- ${t}`).join("\n")}
 
 Recent Context:
 ${getRecentContext(messages)}
@@ -126,22 +133,106 @@ function extractKeyTopics(content: string): string[] {
   // This is a simple implementation
   // In production, you might want to use NLP or AI-based extraction
   const words = content.toLowerCase().split(/\W+/);
-  const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'this', 'that', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'about', 'hello', 'hi', 'thanks', 'thank', 'please', 'yes', 'no', 'ok', 'okay']);
-  
+  const commonWords = new Set([
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "from",
+    "as",
+    "is",
+    "was",
+    "are",
+    "were",
+    "been",
+    "be",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
+    "can",
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "this",
+    "that",
+    "what",
+    "which",
+    "who",
+    "when",
+    "where",
+    "why",
+    "how",
+    "all",
+    "each",
+    "every",
+    "both",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "no",
+    "not",
+    "only",
+    "own",
+    "same",
+    "so",
+    "than",
+    "too",
+    "very",
+    "just",
+    "about",
+    "hello",
+    "hi",
+    "thanks",
+    "thank",
+    "please",
+    "yes",
+    "no",
+    "ok",
+    "okay",
+  ]);
+
   // Count word frequency
   const wordCount: { [key: string]: number } = {};
-  words.forEach(word => {
+
+  words.forEach((word) => {
     if (word.length > 3 && !commonWords.has(word)) {
       wordCount[word] = (wordCount[word] || 0) + 1;
     }
   });
-  
+
   // Get top topics
   const sortedWords = Object.entries(wordCount)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
     .map(([word]) => word);
-  
+
   return sortedWords.length > 0 ? sortedWords : ["General conversation"];
 }
 

@@ -152,13 +152,13 @@ export async function triggerAutomation(
 
     const context: AutomationExecutionContext = {
       contact: {
-        _id: customerFresh._id.toString(),
+        _id: String(customerFresh._id),
         name: customerFresh.name,
         email: customerFresh.email,
         phone: customerFresh.phone,
       },
       conversation: {
-        _id: conversation._id.toString(),
+        _id: String(conversation._id),
         transcript: conversation.transcript,
         metadata: conversation.metadata,
       },
@@ -172,8 +172,8 @@ export async function triggerAutomation(
         : undefined,
       triggerData: {
         batch_id: conversation.metadata?.batch_call_id,
-        conversation_id: conversation._id.toString(),
-        contactId: customerFresh._id.toString(),
+        conversation_id: String(conversation._id),
+        contactId: String(customerFresh._id),
       },
       extracted: null,
       appointment: null,
@@ -186,7 +186,7 @@ export async function triggerAutomation(
       console.log(`[Automation] Executing automation: ${automation.name}`);
       await executeAutomationWithTrace(
         conversationId,
-        automation._id.toString(),
+        String(automation._id),
         automation.name,
         automation.actions,
         context,

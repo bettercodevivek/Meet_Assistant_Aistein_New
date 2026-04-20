@@ -8,11 +8,12 @@ import { getPhoneNumber } from '@/lib/elevenlabs/pythonApi';
 // GET phone number by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { phone_number_id: string } }
+  { params }: { params: Promise<{ phone_number_id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     await connectDB();
+    const { phone_number_id } = await params;
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -23,7 +24,7 @@ export async function GET(
     }
 
     const phoneNumber = await PhoneNumber.findOne({
-      phone_number_id: params.phone_number_id,
+      phone_number_id,
       userId: userOid,
     });
 
@@ -71,11 +72,12 @@ export async function GET(
 // PATCH update phone number
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { phone_number_id: string } }
+  { params }: { params: Promise<{ phone_number_id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     await connectDB();
+    const { phone_number_id } = await params;
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -95,7 +97,7 @@ export async function PATCH(
     } = await request.json();
 
     const phoneNumber = await PhoneNumber.findOne({
-      phone_number_id: params.phone_number_id,
+      phone_number_id,
       userId: userOid,
     });
 

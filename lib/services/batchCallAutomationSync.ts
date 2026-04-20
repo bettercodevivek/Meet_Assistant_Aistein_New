@@ -127,8 +127,8 @@ export async function processCompletedBatchRecipientsForAutomation(
       const alreadyRan = Array.isArray(runs) && runs.length > 0;
       if (!alreadyRan) {
         await triggerAutomation(
-          conversation._id.toString(),
-          customer._id.toString(),
+          String(conversation._id),
+          String(customer._id),
           userOid.toString(),
         );
       }
