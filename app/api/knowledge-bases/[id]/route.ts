@@ -3,6 +3,7 @@ import connectDB from '@/lib/db/mongodb';
 import KnowledgeBase from '@/lib/db/models/KnowledgeBase';
 import { requireAuth } from '@/lib/auth/middleware';
 import { authUserObjectId } from '@/lib/auth/userObjectId';
+import { ensureVoiceDocumentForKnowledgeBase } from '@/lib/services/knowledgeBaseIngestion';
 
 // GET single knowledge base
 export async function GET(
@@ -109,6 +110,20 @@ export async function PUT(
         { status: 404 }
       );
     }
+
+    let voiceDocumentId = '';
+    try {
+      // Re-ingest latest prompt text so agents can use an up-to-date voice KB document id.
+      voiceDocumentId = await ensureVoiceDocumentForKnowledgeBase({
+        userId: userOid,
+        knowledgeBaseId: String(knowledgeBase._id),
+        name: knowledgeBase.name,
+        prompt: knowledgeBase.prompt,
+        firstMessage: knowledgeBase.firstMessage ?? '',
+      });
+    } catch (ingestError) {
+      console.error('[PUT /api/knowledge-bases/:id] Voice KB ingest failed:', ingestError);
+    }
     
     return NextResponse.json({
       success: true,
@@ -117,6 +132,7 @@ export async function PUT(
         name: knowledgeBase.name,
         prompt: knowledgeBase.prompt,
         firstMessage: knowledgeBase.firstMessage ?? '',
+        voiceDocumentId,
         createdAt: knowledgeBase.createdAt,
         updatedAt: knowledgeBase.updatedAt,
       },

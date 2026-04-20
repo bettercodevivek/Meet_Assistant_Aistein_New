@@ -7,6 +7,13 @@ export interface IGoogleIntegration {
   email?: string;
 }
 
+export interface IGoogleWorkspaceIntegration {
+  refreshToken: string;
+  accessToken?: string;
+  accessTokenExpiresAt?: Date;
+  email?: string;
+}
+
 export interface IUser extends Document {
   username: string;
   email: string;
@@ -19,11 +26,27 @@ export interface IUser extends Document {
   /** Optional; used by voice agent / CRM-style lookups */
   phone?: string;
   googleIntegration?: IGoogleIntegration;
+  googleWorkspaceIntegration?: IGoogleWorkspaceIntegration;
   /** Up to 5 LiveAvatar public catalog picks (id from api.liveavatar.com). */
   favoriteLiveAvatars?: { id: string; name: string }[];
+  /** Defaults for batch automation step “Create MeetAssistant link” when node fields are empty. */
+  meetAutomationDefaults?: {
+    knowledgeBaseId?: string;
+    avatarId?: string;
+  };
 }
 
 const GoogleIntegrationSchema = new Schema(
+  {
+    refreshToken: { type: String, required: true },
+    accessToken: String,
+    accessTokenExpiresAt: Date,
+    email: String,
+  },
+  { _id: false },
+);
+
+const GoogleWorkspaceIntegrationSchema = new Schema(
   {
     refreshToken: { type: String, required: true },
     accessToken: String,
@@ -77,6 +100,10 @@ const UserSchema = new Schema<IUser>({
     type: GoogleIntegrationSchema,
     required: false,
   },
+  googleWorkspaceIntegration: {
+    type: GoogleWorkspaceIntegrationSchema,
+    required: false,
+  },
   favoriteLiveAvatars: {
     type: [
       {
@@ -86,7 +113,20 @@ const UserSchema = new Schema<IUser>({
     ],
     default: [],
   },
+  meetAutomationDefaults: {
+    type: {
+      knowledgeBaseId: { type: String, trim: true },
+      avatarId: { type: String, trim: true },
+    },
+    required: false,
+    default: undefined,
+  },
 });
+
+const existingUser = mongoose.models.User as Model<IUser> | undefined;
+if (existingUser && !existingUser.schema.path('meetAutomationDefaults')) {
+  mongoose.deleteModel('User');
+}
 
 export default (mongoose.models.User as Model<IUser>) || mongoose.model<IUser>('User', UserSchema);
 

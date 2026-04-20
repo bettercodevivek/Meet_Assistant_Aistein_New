@@ -69,7 +69,7 @@ export default function KnowledgeBasesPage() {
     <div>
       <PageHeader
         title="Knowledge bases"
-        subtitle="Manage your avatar knowledge bases, system prompts, and optional first message"
+        subtitle="Title and system prompt for each entry. Used by Meet sessions and optional when creating voice agents."
         action={
           <button
             type="button"

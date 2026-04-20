@@ -1,4 +1,5 @@
 import Sidebar from '@/components/Sidebar';
+import { BatchAutomationBackgroundSync } from '@/components/BatchAutomationBackgroundSync';
 
 export default function DashboardLayout({
   children,
@@ -7,6 +8,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-secondary">
+      <BatchAutomationBackgroundSync />
       <Sidebar />
       <div className="lg:pl-60">
         <div className="h-14 shrink-0 lg:hidden" aria-hidden />

@@ -648,7 +648,7 @@ function MeetingsPageInner() {
       const mData = await mRes.json();
       const kbData = await kbRes.json();
       if (mData.success) setMeetings(mData.meetings);
-      if (kbData.success) {
+      if (kbData.success && Array.isArray(kbData.knowledgeBases)) {
         setKnowledgeBases(
           kbData.knowledgeBases.map((k: { id: string; name: string }) => ({
             id: k.id,

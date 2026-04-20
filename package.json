@@ -31,7 +31,8 @@
     "openai": "^4.52.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-qr-code": "^2.0.18"
+    "react-qr-code": "^2.0.18",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^15.5.7",

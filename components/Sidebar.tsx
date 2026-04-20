@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  Bot,
   KeyRound,
   Images,
   LayoutDashboard,
@@ -13,10 +14,13 @@ import {
   Menu,
   MonitorPlay,
   MessageSquare,
+  Phone,
   Plug,
+  Sparkles,
   Users,
   Video,
   X,
+  Zap,
 } from "lucide-react";
 
 function Logomark({ className }: { className?: string }) {
@@ -101,10 +105,31 @@ export default function Sidebar() {
       Icon: Plug,
     },
   ] as const;
-  const kbNav = [
+  const voiceAgentNav = [
+    { href: "/dashboard/agents", label: "Agents", Icon: Bot },
+    {
+      href: "/dashboard/phone-numbers",
+      label: "Phone Numbers",
+      Icon: Phone,
+    },
+    {
+      href: "/dashboard/batch-calling",
+      label: "Batch Calling",
+      Icon: Video,
+    },
+    {
+      href: "/dashboard/automation",
+      label: "Automation",
+      Icon: Zap,
+    },
+    {
+      href: "/dashboard/meet-automation",
+      label: "Meet automation",
+      Icon: Sparkles,
+    },
     {
       href: "/dashboard/knowledge-bases",
-      label: "Knowledge base",
+      label: "Knowledge bases",
       Icon: BookOpen,
     },
   ] as const;
@@ -161,6 +186,21 @@ export default function Sidebar() {
       return (
         pathname === href || pathname.startsWith("/dashboard/integrations")
       );
+    }
+    if (href === "/dashboard/agents") {
+      return pathname === href || pathname.startsWith("/dashboard/agents");
+    }
+    if (href === "/dashboard/phone-numbers") {
+      return pathname === href || pathname.startsWith("/dashboard/phone-numbers");
+    }
+    if (href === "/dashboard/batch-calling") {
+      return pathname === href;
+    }
+    if (href === "/dashboard/automation") {
+      return pathname === href || pathname.startsWith("/dashboard/automation");
+    }
+    if (href === "/dashboard/meet-automation") {
+      return pathname === href || pathname.startsWith("/dashboard/meet-automation");
     }
     if (href === "/dashboard/admin") {
       return pathname === "/dashboard/admin";
@@ -246,12 +286,20 @@ export default function Sidebar() {
               <NavLink {...item} />
             </li>
           ))}
-          {kbNav.map((item) => (
-            <li key={item.href}>
-              <NavLink {...item} />
-            </li>
-          ))}
         </ul>
+
+        <div className="mt-6 border-t border-slate-100 pt-4">
+          <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">
+            Voice Agent
+          </p>
+          <ul className="space-y-1">
+            {voiceAgentNav.map((item) => (
+              <li key={item.href}>
+                <NavLink {...item} />
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {adminNav.length > 0 ? (
           <div className="mt-6 border-t border-slate-100 pt-4">
