@@ -142,7 +142,7 @@ function extractKeyTopics(content: string): string[] {
     .slice(0, 5)
     .map(([word]) => word);
   
-  return sortedWords.length > 0 ? sortedWords : ['General conversation'];
+  return sortedWords.length > 0 ? sortedWords : ["General conversation"];
 }
 
 /**
@@ -150,21 +150,27 @@ function extractKeyTopics(content: string): string[] {
  */
 function getRecentContext(messages: Message[], count: number = 4): string {
   const recentMessages = messages.slice(-count);
+
   return recentMessages
-    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.substring(0, 150)}${m.content.length > 150 ? '...' : ''}`)
-    .join('\n');
+    .map(
+      (m) =>
+        `${m.role === "user" ? "User" : "Assistant"}: ${m.content.substring(0, 150)}${m.content.length > 150 ? "..." : ""}`,
+    )
+    .join("\n");
 }
 
 /**
  * Generates an enhanced session context by combining knowledge base prompt with conversation summary
  */
-export function createSessionContext(knowledgeBasePrompt: string, conversationSummary: string): string {
+export function createSessionContext(
+  knowledgeBasePrompt: string,
+  conversationSummary: string,
+): string {
   if (!conversationSummary) {
     return knowledgeBasePrompt;
   }
-  
+
   return `${knowledgeBasePrompt}
 
 ${conversationSummary}`;
 }
-

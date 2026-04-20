@@ -8,11 +8,12 @@ import { updateAgentPromptInPythonAPI } from '@/lib/elevenlabs/pythonApi';
 // PATCH update agent prompt
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     await connectDB();
+    const { id } = await params;
 
     const userOid = authUserObjectId(user.userId);
     if (!userOid) {
@@ -61,7 +62,7 @@ export async function PATCH(
 
     // Find agent by agent_id (params.id is the agent_id from Python API)
     const agent = await Agent.findOne({
-      agent_id: params.id,
+      agent_id: id,
       userId: userOid,
     });
 
@@ -80,7 +81,7 @@ export async function PATCH(
 
     // Update in Python API
     try {
-      await updateAgentPromptInPythonAPI(params.id, {
+      await updateAgentPromptInPythonAPI(id, {
         first_message,
         system_prompt,
         language,
