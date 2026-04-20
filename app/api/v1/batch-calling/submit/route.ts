@@ -8,6 +8,11 @@ import { authUserObjectId } from '@/lib/auth/userObjectId';
 import { submitBatchCall } from '@/lib/elevenlabs/pythonApi';
 import { parseRecipientsFromFile } from '@/lib/batchCalling/parseRecipientsFile';
 
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
 // POST submit batch call
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +24,20 @@ export async function POST(request: NextRequest) {
     const call_name = formData.get('call_name') as string;
     const phone_number_id = formData.get('phone_number_id') as string;
     const file = formData.get('file') as File | null;
+    const noAnswerRetryRaw = formData.get('no_answer_auto_retry_enabled');
+    const no_answer_auto_retry_enabled =
+      noAnswerRetryRaw !== 'false' && noAnswerRetryRaw !== '0';
+    const intervalMin = clampInt(
+      parseInt(String(formData.get('no_answer_retry_interval_minutes') ?? '5'), 10),
+      1,
+      24 * 60,
+    );
+    const no_answer_retry_interval_seconds = clampInt(intervalMin * 60, 60, 24 * 3600);
+    const no_answer_retry_max_waves = clampInt(
+      parseInt(String(formData.get('no_answer_retry_max_waves') ?? '3'), 10),
+      0,
+      50,
+    );
 
     console.log('[POST /api/v1/batch-calling/submit] Request:', {
       userId: user.userId,
@@ -193,6 +212,12 @@ export async function POST(request: NextRequest) {
       segment_start_index: 0,
       resume_next_index: 0,
       can_resume: false,
+      no_answer_auto_retry_enabled,
+      no_answer_retry_interval_seconds,
+      no_answer_retry_max_waves,
+      no_answer_retry_waves_completed: 0,
+      next_no_answer_retry_at_unix: 0,
+      no_answer_auto_retry_in_flight: false,
     });
 
     return NextResponse.json(

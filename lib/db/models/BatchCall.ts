@@ -48,6 +48,20 @@ export interface IBatchCall extends Document {
   /** After cancel: first global index not yet completed; used to resume. */
   resume_next_index: number;
   can_resume: boolean;
+  /** When true, no-answer / failed rows are redialed automatically after an interval (up to max waves). */
+  no_answer_auto_retry_enabled: boolean;
+  /** Seconds to wait after a wave completes before redialing remaining no-answer rows. */
+  no_answer_retry_interval_seconds: number;
+  /** Max automatic redial waves after the initial batch completes (each wave calls all still no-answer). */
+  no_answer_retry_max_waves: number;
+  /** How many auto-retry waves have fully completed (excludes the first CSV batch). */
+  no_answer_retry_waves_completed: number;
+  /** Unix seconds when the next auto-retry may run; 0 if none scheduled. */
+  next_no_answer_retry_at_unix: number;
+  /** True while an auto-retry batch is running in the voice API (completed = wave finished). */
+  no_answer_auto_retry_in_flight: boolean;
+  /** Phones included in the current Python job when it is a non-contiguous auto-retry (avoids wrong index-based status merge). */
+  current_job_dial_phones?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -189,6 +203,34 @@ const BatchCallSchema = new Schema<IBatchCall>(
     can_resume: {
       type: Boolean,
       default: false,
+    },
+    no_answer_auto_retry_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    no_answer_retry_interval_seconds: {
+      type: Number,
+      default: 300,
+    },
+    no_answer_retry_max_waves: {
+      type: Number,
+      default: 3,
+    },
+    no_answer_retry_waves_completed: {
+      type: Number,
+      default: 0,
+    },
+    next_no_answer_retry_at_unix: {
+      type: Number,
+      default: 0,
+    },
+    no_answer_auto_retry_in_flight: {
+      type: Boolean,
+      default: false,
+    },
+    current_job_dial_phones: {
+      type: [String],
+      required: false,
     },
     createdAt: {
       type: Date,

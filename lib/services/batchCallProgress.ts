@@ -170,6 +170,12 @@ export function mergeRecipientStatuses(
     return;
   }
 
+  // Auto-retry jobs dial a non-contiguous subset; index-based mapping would mark the wrong CSV rows.
+  const dialSubset = batchCall.current_job_dial_phones;
+  if (dialSubset && dialSubset.length > 0) {
+    return;
+  }
+
   for (let i = 0; i < recipients.length; i++) {
     const r = recipients[i];
     if (st === 'cancelled') {

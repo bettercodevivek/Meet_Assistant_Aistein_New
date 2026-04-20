@@ -56,6 +56,10 @@ export async function POST(
     batchCall.resume_next_index = globalDone;
     batchCall.can_resume = globalDone < batchCall.recipients.length;
 
+    batchCall.next_no_answer_retry_at_unix = 0;
+    batchCall.no_answer_auto_retry_in_flight = false;
+    batchCall.current_job_dial_phones = undefined;
+
     const response = await cancelBatchCall(jobId);
 
     batchCall.status = 'cancelled';

@@ -44,6 +44,12 @@ interface BatchCall {
   segment_start_index?: number;
   resume_next_index?: number;
   can_resume?: boolean;
+  no_answer_auto_retry_enabled?: boolean;
+  no_answer_retry_interval_seconds?: number;
+  no_answer_retry_max_waves?: number;
+  no_answer_retry_waves_completed?: number;
+  next_no_answer_retry_at_unix?: number;
+  no_answer_auto_retry_in_flight?: boolean;
 }
 
 interface Agent {
@@ -301,6 +307,11 @@ export default function BatchCallingPage() {
                     : Math.min(rawDone, total);
                 const pct = Math.min(100, Math.round((done / total) * 100));
                 const inFlight = ['pending', 'scheduled', 'in_progress'].includes(batch.status);
+                const nextRetryAt = batch.next_no_answer_retry_at_unix;
+                const retryScheduled =
+                  typeof nextRetryAt === 'number' &&
+                  nextRetryAt > 0 &&
+                  batch.no_answer_auto_retry_enabled !== false;
                 return (
                   <article
                     key={batch._id}
@@ -332,6 +343,19 @@ export default function BatchCallingPage() {
 
                     {inFlight ? (
                       <p className="mt-3 text-xs font-medium text-brand-700">Batch calling in progress</p>
+                    ) : null}
+                    {retryScheduled && !inFlight ? (
+                      <p className="mt-3 text-xs text-slate-600">
+                        No-answer redial scheduled{' '}
+                        {typeof nextRetryAt === 'number' ? (
+                          <time dateTime={new Date(nextRetryAt * 1000).toISOString()}>
+                            {new Date(nextRetryAt * 1000).toLocaleString()}
+                          </time>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {batch.no_answer_auto_retry_in_flight ? (
+                      <p className="mt-1 text-xs font-medium text-brand-800">Auto-retry wave running…</p>
                     ) : null}
 
                     <div className="mt-3 space-y-2">
@@ -554,6 +578,33 @@ function BatchDetailModal({
             Each row shows this contact’s call status. Cancel anytime; you can resume from the next
             contact later.
           </p>
+          {(() => {
+            const enabled = payload?.no_answer_auto_retry_enabled !== false;
+            const nextAt = Number(payload?.next_no_answer_retry_at_unix || 0);
+            const wavesDone = Number(payload?.no_answer_retry_waves_completed ?? 0);
+            const maxWaves = Number(payload?.no_answer_retry_max_waves ?? 3);
+            const inRetryFlight = Boolean(payload?.no_answer_auto_retry_in_flight);
+            if (!enabled) return null;
+            return (
+              <div className="mt-3 rounded-lg border border-brand-100 bg-brand-50/80 px-3 py-2 text-xs text-slate-700">
+                <p className="font-medium text-brand-900">No-answer auto-redial</p>
+                <p className="mt-1">
+                  Waves completed: {wavesDone} / {maxWaves} (not counting the first list run)
+                </p>
+                {inRetryFlight ? (
+                  <p className="mt-1 font-medium text-brand-800">A redial wave is in progress.</p>
+                ) : null}
+                {nextAt > 0 ? (
+                  <p className="mt-1">
+                    Next scheduled attempt:{' '}
+                    <time dateTime={new Date(nextAt * 1000).toISOString()}>
+                      {new Date(nextAt * 1000).toLocaleString()}
+                    </time>
+                  </p>
+                ) : null}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-2 py-2 sm:px-4">
@@ -645,6 +696,9 @@ function SubmitForm({
     agent_id: '',
     file: null as File | null,
     recipients: [] as any[],
+    no_answer_auto_retry_enabled: true,
+    no_answer_retry_interval_minutes: 5,
+    no_answer_retry_max_waves: 3,
   });
   const [testCall, setTestCall] = useState({
     phone_number: '',
@@ -674,6 +728,9 @@ function SubmitForm({
       agent_id: '',
       file: null,
       recipients: [],
+      no_answer_auto_retry_enabled: true,
+      no_answer_retry_interval_minutes: 5,
+      no_answer_retry_max_waves: 3,
     });
   };
 
@@ -698,6 +755,18 @@ function SubmitForm({
       if (formData.file) {
         submitFormData.append('file', formData.file);
       }
+      submitFormData.append(
+        'no_answer_auto_retry_enabled',
+        formData.no_answer_auto_retry_enabled ? 'true' : 'false',
+      );
+      submitFormData.append(
+        'no_answer_retry_interval_minutes',
+        String(formData.no_answer_retry_interval_minutes),
+      );
+      submitFormData.append(
+        'no_answer_retry_max_waves',
+        String(formData.no_answer_retry_max_waves),
+      );
 
       const response = await fetch('/api/v1/batch-calling/submit', {
         method: 'POST',
@@ -903,6 +972,77 @@ function SubmitForm({
                   ))}
                 </select>
               </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    checked={formData.no_answer_auto_retry_enabled}
+                    onChange={(e) =>
+                      setFormData({ ...formData, no_answer_auto_retry_enabled: e.target.checked })
+                    }
+                  />
+                  <span>
+                    <span className="text-sm font-medium text-slate-900">
+                      Auto-redial no-answer and failed numbers
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-600">
+                      After each wave completes, wait the interval below, then call again everyone who
+                      did not pick up (or failed), until the max rounds are reached or everyone is
+                      reached.
+                    </span>
+                  </span>
+                </label>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Wait between redial waves (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={formData.no_answer_retry_interval_minutes}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          no_answer_retry_interval_minutes: Math.max(
+                            1,
+                            Math.min(1440, parseInt(e.target.value, 10) || 5),
+                          ),
+                        })
+                      }
+                      disabled={!formData.no_answer_auto_retry_enabled}
+                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-primary outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Max automatic redial waves
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={formData.no_answer_retry_max_waves}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          no_answer_retry_max_waves: Math.max(
+                            0,
+                            Math.min(50, parseInt(e.target.value, 10) || 0),
+                          ),
+                        })
+                      }
+                      disabled={!formData.no_answer_auto_retry_enabled}
+                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-primary outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Does not include the first CSV run. Use 0 to disable redials.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1000,7 +1140,9 @@ function SubmitForm({
               <p className="mt-4 text-xs text-slate-500">
                 Contacts are validated on the server. After starting, track progress on the batch
                 cards; open a card to see every contact’s status. You can cancel and resume later —
-                calling continues from the next contact after the last completed one.
+                calling continues from the next contact after the last completed one. If you enabled
+                auto-redial, numbers that did not answer are called again after your interval until max
+                waves are used.
               </p>
             </div>
             <div className="flex justify-between gap-3">

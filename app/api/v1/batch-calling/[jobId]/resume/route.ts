@@ -109,6 +109,10 @@ export async function POST(
 
     const call_name = `${batchCall.call_name} (resumed)`;
 
+    batchCall.next_no_answer_retry_at_unix = 0;
+    batchCall.no_answer_auto_retry_in_flight = false;
+    batchCall.current_job_dial_phones = undefined;
+
     const pythonApiResponse = await submitBatchCall({
       agent_id: batchCall.agent_id,
       call_name,

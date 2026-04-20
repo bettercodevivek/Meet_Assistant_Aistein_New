@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth/middleware';
 import { authUserObjectId } from '@/lib/auth/userObjectId';
 import { applyPythonSyncToBatchCall } from '@/lib/services/batchCallProgress';
 import { processCompletedBatchRecipientsForAutomation } from '@/lib/services/batchCallAutomationSync';
+import { processNoAnswerAutoRetry } from '@/lib/services/batchCallNoAnswerRetry';
 import { getPythonApiBaseUrl } from '@/lib/elevenlabs/pythonApi';
 
 const PYTHON_API_URL = getPythonApiBaseUrl();
@@ -62,6 +63,8 @@ export async function POST(request: NextRequest) {
     await batchCall.save();
 
     await processCompletedBatchRecipientsForAutomation(batchCall, userOid);
+    await processNoAnswerAutoRetry(batchCall, userOid);
+    if (batchCall.isModified()) await batchCall.save();
 
     return NextResponse.json({
       success: true,

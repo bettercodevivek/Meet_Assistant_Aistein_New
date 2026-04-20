@@ -9,6 +9,7 @@ import {
   computeGlobalFinished,
 } from '@/lib/services/batchCallProgress';
 import { processCompletedBatchRecipientsForAutomation } from '@/lib/services/batchCallAutomationSync';
+import { processNoAnswerAutoRetry } from '@/lib/services/batchCallNoAnswerRetry';
 
 // GET batch job status
 export async function GET(
@@ -52,6 +53,8 @@ export async function GET(
       applyPythonSyncToBatchCall(batchCall, pythonApiStatus);
       await batchCall.save();
       await processCompletedBatchRecipientsForAutomation(batchCall, userOid);
+      await processNoAnswerAutoRetry(batchCall, userOid);
+      if (batchCall.isModified()) await batchCall.save();
 
       const global_total_finished = computeGlobalFinished(batchCall);
       const recipients = batchCall.recipients.map((r, index) => ({
@@ -69,6 +72,12 @@ export async function GET(
         segment_start_index: batchCall.segment_start_index,
         resume_next_index: batchCall.resume_next_index,
         can_resume: batchCall.can_resume,
+        no_answer_auto_retry_enabled: batchCall.no_answer_auto_retry_enabled,
+        no_answer_retry_interval_seconds: batchCall.no_answer_retry_interval_seconds,
+        no_answer_retry_max_waves: batchCall.no_answer_retry_max_waves,
+        no_answer_retry_waves_completed: batchCall.no_answer_retry_waves_completed,
+        next_no_answer_retry_at_unix: batchCall.next_no_answer_retry_at_unix,
+        no_answer_auto_retry_in_flight: batchCall.no_answer_auto_retry_in_flight,
         recipients,
         call_name: batchCall.call_name,
         agent_name: batchCall.agent_name,
@@ -105,6 +114,12 @@ export async function GET(
         segment_start_index: batchCall.segment_start_index,
         resume_next_index: batchCall.resume_next_index,
         can_resume: batchCall.can_resume,
+        no_answer_auto_retry_enabled: batchCall.no_answer_auto_retry_enabled,
+        no_answer_retry_interval_seconds: batchCall.no_answer_retry_interval_seconds,
+        no_answer_retry_max_waves: batchCall.no_answer_retry_max_waves,
+        no_answer_retry_waves_completed: batchCall.no_answer_retry_waves_completed,
+        next_no_answer_retry_at_unix: batchCall.next_no_answer_retry_at_unix,
+        no_answer_auto_retry_in_flight: batchCall.no_answer_auto_retry_in_flight,
         recipients,
         call_name: batchCall.call_name,
         recipients_count: batchCall.recipients_count,
