@@ -235,7 +235,7 @@ export default function BatchCallingPage() {
             Manage batch calling campaigns for voice agents. When each contact&apos;s call finishes, your
             batch is synced and{' '}
             <Link href="/dashboard/automation" className="font-medium text-brand-600 hover:underline">
-              automations
+              batch automations
             </Link>{' '}
             run automatically (no manual sync needed).
           </span>

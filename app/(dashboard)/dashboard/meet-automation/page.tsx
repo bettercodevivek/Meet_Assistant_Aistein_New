@@ -94,12 +94,12 @@ export default function MeetAutomationPage() {
   return (
     <div>
       <PageHeader
-        title="Meet automation"
+        title="Meet link defaults"
         subtitle={
           <span>
-            Choose the knowledge base and LiveAvatar id used when a batch automation runs{' '}
-            <span className="font-medium text-slate-800">Create MeetAssistant link</span> and the node
-            does not set its own KB / avatar. You can still override per automation in the flow editor.
+            Default knowledge base and LiveAvatar used when a batch automation runs{' '}
+            <span className="font-medium text-slate-800">Create MeetAssistant link</span> and the step does
+            not set its own KB or avatar. Override per flow in the batch automations editor anytime.
           </span>
         }
         action={
@@ -197,7 +197,7 @@ export default function MeetAutomationPage() {
           <p className="text-xs text-tertiary">
             Related:{' '}
             <Link href="/dashboard/automation" className="font-medium text-brand-600 hover:underline">
-              Automation
+              Batch automations
             </Link>{' '}
             ·{' '}
             <Link href="/dashboard/batch-calling" className="font-medium text-brand-600 hover:underline">

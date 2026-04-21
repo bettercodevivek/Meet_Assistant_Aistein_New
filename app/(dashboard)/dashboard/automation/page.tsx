@@ -28,6 +28,49 @@ type FlowNode = {
   config: Record<string, unknown>;
 };
 
+/** Short labels for the flow summary strip (modal). */
+function nodeFlowSummaryLabel(node: FlowNode): string {
+  switch (node.type) {
+    case 'trigger':
+      return 'Trigger';
+    case 'flow_condition':
+      return 'Condition';
+    case 'flow_review_extracted':
+      return 'Review';
+    case 'aistein_extract_data':
+      return 'Extract';
+    case 'aistein_google_sheet_append_row':
+      return 'Google Sheet';
+    case 'aistein_create_app_meeting':
+      return 'Meet link';
+    case 'aistein_google_calendar_create_event':
+      return 'Calendar';
+    case 'aistein_send_email':
+      return 'Gmail';
+    default:
+      return '';
+  }
+}
+
+/** True when Sheet runs before Meet but column mapping references the guest meet URL (will be empty). */
+function sheetRunsBeforeMeetWithMeetUrlRefs(nodes: FlowNode[]): boolean {
+  let sheetIdx = -1;
+  let meetIdx = -1;
+  nodes.forEach((n, i) => {
+    if (n.type === 'aistein_google_sheet_append_row') sheetIdx = i;
+    if (n.type === 'aistein_create_app_meeting') meetIdx = i;
+  });
+  if (sheetIdx < 0 || meetIdx < 0 || sheetIdx >= meetIdx) return false;
+
+  const vals = nodes[sheetIdx]?.config?.values;
+  if (!Array.isArray(vals)) return false;
+  return vals.some(
+    (v) =>
+      typeof v === 'string' &&
+      (v.includes('meeting_link') || v.includes('app_meeting')),
+  );
+}
+
 /** Shown in the UI and prefilled when using the prebuilt flow. */
 const PREBUILT_APPOINTMENT_BOOKING_NAME = 'Appointment booking';
 
@@ -512,8 +555,8 @@ export default function AutomationPage() {
   return (
     <div>
       <PageHeader
-        title="Automation"
-        subtitle="Prebuilt: after a batch call completes, extract the appointment → create a MeetAssistant join link → append row to Sheets (including the meet URL) → email the guest."
+        title="Batch automations"
+        subtitle="Prebuilt: after a batch call completes, extract the appointment → create a MeetAssistant join link → append row to Sheets (including the meeting link) → email the guest."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -581,8 +624,9 @@ export default function AutomationPage() {
               <div>
                 <p className="text-base font-semibold text-primary">Prebuilt flow: Appointment booking</p>
                 <p className="mt-1 text-xs text-tertiary">
-                  Same structure as batch-call → extract → condition → Sheet → Meet → email. Configure Google
-                  Sheet (paste URL), KB, and avatar in the editor.
+                  Batch call → extract → condition → review → Meet link → Google Sheet (with{' '}
+                  <code className="rounded bg-white/80 px-1 py-0.5 text-[11px]">{'{{meeting_link}}'}</code>) →
+                  Gmail. Configure spreadsheet URL, KB, and avatar in the editor.
                 </p>
               </div>
               <button
@@ -615,19 +659,19 @@ export default function AutomationPage() {
                 from CSV.
               </li>
               <li>
-                <span className="font-medium text-primary">Google Sheet</span> — append row (paste spreadsheet
-                link or ID, map columns).
+                <span className="font-medium text-primary">MeetAssistant</span> — create the guest meeting link
+                (same knowledge base as the call when configured).
               </li>
               <li>
-                <span className="font-medium text-primary">MeetAssistant</span> — join link with your knowledge
-                base.
-              </li>
-              <li>
-                <span className="font-medium text-primary">Gmail</span> — send{' '}
+                <span className="font-medium text-primary">Google Sheet</span> — append row after the meet step so
+                columns can include{' '}
                 <code className="rounded bg-white/80 px-1 py-0.5 text-xs text-slate-800 shadow-sm">
                   {'{{meeting_link}}'}
-                </code>{' '}
-                to the contact.
+                </code>
+                .
+              </li>
+              <li>
+                <span className="font-medium text-primary">Gmail</span> — send the meeting link to the contact.
               </li>
             </ol>
             <p className="mt-3 text-xs text-tertiary">
@@ -644,7 +688,7 @@ export default function AutomationPage() {
         <EmptyState
           icon={Zap}
           title="No automations yet"
-          description="Start with the prebuilt appointment booking flow (extract → Sheet → MeetAssistant → email), or build a custom automation."
+          description="Start with the prebuilt flow (extract → Meet link → Google Sheet with meeting link → Gmail), or build a custom automation."
         >
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
@@ -875,9 +919,9 @@ export default function AutomationPage() {
                   <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-950">
                     <p className="font-semibold">Prebuilt flow loaded</p>
                     <p className="mt-1 text-xs leading-relaxed text-brand-900/90">
-                      Extract → review → Google Sheet → MeetAssistant (your KB) → Gmail with{' '}
-                      <code className="rounded bg-white/80 px-1 py-0.5 text-[11px]">{'{{meeting_link}}'}</code>.
-                      Fill spreadsheet ID, knowledge base, and avatar ID, then save.
+                      Extract → review → MeetAssistant (your KB) → Google Sheet (include{' '}
+                      <code className="rounded bg-white/80 px-1 py-0.5 text-[11px]">{'{{meeting_link}}'}</code>
+                      ) → Gmail. Fill spreadsheet URL, knowledge base, and avatar, then save.
                     </p>
                   </div>
                 ) : null}
@@ -922,11 +966,28 @@ export default function AutomationPage() {
 
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <h4 className="text-sm font-semibold text-slate-700">Flow</h4>
+                  <p className="mb-2 mt-1 text-xs leading-relaxed text-slate-600">
+                    <span className="font-medium text-slate-700">Execution order:</span>{' '}
+                    {formData.nodes.map(nodeFlowSummaryLabel).filter(Boolean).join(' → ')}
+                  </p>
+                  {sheetRunsBeforeMeetWithMeetUrlRefs(formData.nodes) ? (
+                    <div className="mb-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+                      <p>
+                        <span className="font-medium">Google Sheet runs before Meet link</span> but your columns
+                        reference <code className="rounded bg-white/90 px-1">{'{{meeting_link}}'}</code> or{' '}
+                        <code className="rounded bg-white/90 px-1">app_meeting</code>. Move{' '}
+                        <span className="font-medium">MeetAssistant — create join link</span> above the Sheet step,
+                        or remove those placeholders.
+                      </p>
+                    </div>
+                  ) : null}
                   <p className="mb-4 text-xs leading-relaxed text-slate-600">
-                    Click an action row to configure it. For{' '}
-                    <span className="font-medium text-slate-800">Google Sheets</span>, paste your spreadsheet
-                    URL or ID, set the tab name, then map columns (including{' '}
-                    <code className="rounded bg-white px-1 text-[11px]">{'{{extracted.date}}'}</code>).
+                    Click an action row to configure it. Put <span className="font-medium text-slate-800">Google Sheets</span>{' '}
+                    after <span className="font-medium text-slate-800">Meet link</span> if the row should include the
+                    guest URL. Map columns with{' '}
+                    <code className="rounded bg-white px-1 text-[11px]">{'{{extracted.date}}'}</code>,{' '}
+                    <code className="rounded bg-white px-1 text-[11px]">{'{{meeting_link}}'}</code>, etc.
                   </p>
                   <div className="space-y-2">
                     {formData.nodes.map((node, index) => (
@@ -1504,12 +1565,20 @@ function GoogleSheetsConfig({
           ))}
         </ul>
         <p className="mt-2 text-xs text-slate-500">
-          Variables: {'{{contact.name}}'}, {'{{contact.email}}'}, {'{{contact.phone}}'}, plus{' '}
-          {'{{extracted.*}}'} keys from your extract JSON (e.g. {'{{extracted.date}}'}). After the Create
-          MeetAssistant step runs: {'{{meeting_link}}'} or {'{{app_meeting.shareUrl}}'} for the booking’s join URL,{' '}
-          {'{{app_meeting.meetingId}}'} for the meeting id. Google Calendar step (if used):{' '}
-          {'{{calendar_event.hangoutLink}}'}, {'{{calendar_event.htmlLink}}'}.
+          Use placeholders in each cell; values resolve when the automation runs. Tip: put the Sheet step after Meet
+          link if you map <code className="rounded bg-slate-100 px-1">{'{{meeting_link}}'}</code>.
         </p>
+        <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-slate-700">
+            Variable reference (expand)
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Contact: {'{{contact.name}}'}, {'{{contact.email}}'}, {'{{contact.phone}}'}. Extract JSON:{' '}
+            {'{{extracted.*}}'} (e.g. {'{{extracted.date}}'}). After the Create MeetAssistant step:{' '}
+            {'{{meeting_link}}'}, {'{{app_meeting.shareUrl}}'}, {'{{app_meeting.meetingId}}'}. Google Calendar (if
+            used): {'{{calendar_event.hangoutLink}}'}, {'{{calendar_event.htmlLink}}'}.
+          </p>
+        </details>
       </div>
 
       <details className="rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">

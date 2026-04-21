@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
   Bot,
+  ChevronDown,
   KeyRound,
   Images,
   LayoutDashboard,
@@ -68,6 +69,7 @@ export default function Sidebar() {
   const [userRole, setUserRole] = useState<string>("user");
   const [username, setUsername] = useState<string>("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -87,6 +89,23 @@ export default function Sidebar() {
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const t = window.setTimeout(() => {
+      document.getElementById("sidebar-close-button")?.focus();
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   const handleLogout = async () => {
     try {
@@ -139,12 +158,14 @@ export default function Sidebar() {
       items: [
         {
           href: "/dashboard/automation",
-          label: "Automation",
+          label: "Batch automations",
+          description: "Flows after batch calls",
           Icon: Zap,
         },
         {
           href: "/dashboard/meet-automation",
-          label: "Meet automation",
+          label: "Meet link defaults",
+          description: "KB & avatar fallbacks",
           Icon: Sparkles,
         },
       ],
@@ -243,28 +264,39 @@ export default function Sidebar() {
   const NavLink = ({
     href,
     label,
+    description,
     Icon,
   }: {
     href: string;
     label: string;
+    description?: string;
     Icon: typeof Video;
   }) => {
     const active = isActive(href);
     return (
       <Link
         href={href}
-        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+        className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
           active
             ? "bg-brand-50 text-brand-600"
             : "text-secondary hover:bg-slate-50 hover:text-primary"
         }`}
       >
         <Icon
-          className={`h-[18px] w-[18px] shrink-0 ${active ? "text-brand-600" : "text-secondary"}`}
+          className={`mt-0.5 h-[18px] w-[18px] shrink-0 ${active ? "text-brand-600" : "text-secondary"}`}
           strokeWidth={1.75}
           aria-hidden
         />
-        {label}
+        <span className="min-w-0 leading-snug">
+          {label}
+          {description ? (
+            <span
+              className={`mt-0.5 block text-[11px] font-normal ${active ? "text-brand-600/80" : "text-tertiary"}`}
+            >
+              {description}
+            </span>
+          ) : null}
+        </span>
       </Link>
     );
   };
@@ -287,6 +319,7 @@ export default function Sidebar() {
           </span>
         </Link>
         <button
+          id="sidebar-close-button"
           type="button"
           className="rounded-lg p-2 text-secondary hover:bg-slate-50 lg:hidden"
           aria-label="Close menu"
@@ -318,7 +351,12 @@ export default function Sidebar() {
                 <ul className="space-y-1">
                   {group.items.map((item) => (
                     <li key={item.href}>
-                      <NavLink {...item} />
+                      <NavLink
+                        href={item.href}
+                        label={item.label}
+                        Icon={item.Icon}
+                        description={"description" in item ? item.description : undefined}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -329,16 +367,28 @@ export default function Sidebar() {
 
         {adminNav.length > 0 ? (
           <div className="mt-6 border-t border-slate-100 pt-4">
-            <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">
-              Admin
-            </p>
-            <ul className="space-y-1">
-              {adminNav.map((item) => (
-                <li key={item.href}>
-                  <NavLink {...item} />
-                </li>
-              ))}
-            </ul>
+            <button
+              type="button"
+              onClick={() => setAdminOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-tertiary transition-colors hover:bg-slate-50 hover:text-secondary"
+              aria-expanded={adminOpen}
+            >
+              <span>Admin</span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 transition-transform ${adminOpen ? "rotate-0" : "-rotate-90"}`}
+                strokeWidth={1.75}
+                aria-hidden
+              />
+            </button>
+            {adminOpen ? (
+              <ul className="mt-1 space-y-1">
+                {adminNav.map((item) => (
+                  <li key={item.href}>
+                    <NavLink {...item} />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </nav>

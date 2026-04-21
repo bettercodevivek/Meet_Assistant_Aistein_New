@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { ArrowRight, Loader2, Plus } from 'lucide-react';
+import { ArrowRight, BookOpen, Loader2, PhoneOutgoing, Plug, Plus, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -28,21 +28,49 @@ function meetingStatusBadge(status: string, isActive: boolean) {
   return <Badge variant="active">Active</Badge>;
 }
 
+const voiceAgentShortcuts = [
+  {
+    href: '/dashboard/batch-calling',
+    label: 'Batch calling',
+    description: 'Upload contacts and run voice campaigns',
+  },
+  {
+    href: '/dashboard/automation',
+    label: 'Batch automations',
+    description: 'Flows after calls complete',
+  },
+  {
+    href: '/dashboard/knowledge-bases',
+    label: 'Knowledge bases',
+    description: 'Documents for your assistant',
+  },
+  {
+    href: '/dashboard/integrations',
+    label: 'Integrations',
+    description: 'Google Workspace & Gmail',
+  },
+] as const;
+
 export default function DashboardPage() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
+        setLoadError(false);
         const response = await fetch('/api/meetings?limit=100');
         const data = await response.json();
         if (data.success && Array.isArray(data.meetings)) {
           setMeetings(data.meetings);
+        } else {
+          setLoadError(true);
         }
       } catch (e) {
         console.error(e);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -66,7 +94,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle="Create meeting links and manage your AI avatar sessions"
+        subtitle="Create meeting links, manage guest sessions, and open Voice Agent tools from shortcuts below."
         action={
           <button
             type="button"
@@ -78,6 +106,68 @@ export default function DashboardPage() {
           </button>
         }
       />
+
+      <section aria-label="Voice Agent shortcuts">
+        <h2 className="sr-only">Voice Agent shortcuts</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {voiceAgentShortcuts.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="group flex flex-col rounded-xl border border-slate-200 bg-primary p-4 transition-colors hover:border-brand-200 hover:bg-brand-50/50"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-primary group-hover:text-brand-700">
+                {item.href === '/dashboard/automation' ? (
+                  <Zap className="h-4 w-4 text-brand-600" strokeWidth={1.75} aria-hidden />
+                ) : item.href === '/dashboard/knowledge-bases' ? (
+                  <BookOpen className="h-4 w-4 text-brand-600" strokeWidth={1.75} aria-hidden />
+                ) : item.href === '/dashboard/integrations' ? (
+                  <Plug className="h-4 w-4 text-brand-600" strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <PhoneOutgoing className="h-4 w-4 text-brand-600" strokeWidth={1.75} aria-hidden />
+                )}
+                {item.label}
+              </span>
+              <span className="mt-1 text-xs text-tertiary">{item.description}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {loadError ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="alert"
+        >
+          <p>Could not load meetings. Check your connection and try again.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setLoadError(false);
+              void (async () => {
+                try {
+                  const response = await fetch('/api/meetings?limit=100');
+                  const data = await response.json();
+                  if (data.success && Array.isArray(data.meetings)) {
+                    setMeetings(data.meetings);
+                  } else {
+                    setLoadError(true);
+                  }
+                } catch (e) {
+                  console.error(e);
+                  setLoadError(true);
+                } finally {
+                  setLoading(false);
+                }
+              })();
+            }}
+            className="shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-200"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatsCard label="Total meetings" value={meetings.length} />
