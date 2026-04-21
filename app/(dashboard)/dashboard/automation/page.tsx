@@ -32,7 +32,7 @@ type FlowNode = {
 const PREBUILT_APPOINTMENT_BOOKING_NAME = 'Appointment booking';
 
 const PREBUILT_APPOINTMENT_BOOKING_DESCRIPTION =
-  'After each completed batch call: extract appointment details from the transcript, append them to Google Sheets, create a MeetAssistant join link using your knowledge base (same assistant context as the call), then email that link to the contact so they can join the live session.';
+  'After each completed batch call: extract appointment details from the transcript, create a MeetAssistant join link (same assistant context as the call), append contact + extraction + meet URL to Google Sheets, then email that link to the contact.';
 
 /** JSON example sent to the extract API so the model returns consistent fields. */
 const APPOINTMENT_JSON_EXAMPLE = {
@@ -88,19 +88,6 @@ function appointmentTemplateNodes(): FlowNode[] {
       config: { kind: 'extracted_preview' },
     },
     {
-      id: 'sheet',
-      type: 'aistein_google_sheet_append_row',
-      label: 'Append booking to Google Sheet',
-      config: {
-        type: 'aistein_google_sheet_append_row',
-        spreadsheet_id: '',
-        spreadsheet_url: '',
-        sheet_tab: 'Sheet1',
-        range: 'Sheet1!A:Z',
-        values: DEFAULT_APPOINTMENT_SHEET_COLUMNS,
-      },
-    },
-    {
       id: 'meet',
       type: 'aistein_create_app_meeting',
       label: 'Create MeetAssistant link (same knowledge base)',
@@ -111,6 +98,19 @@ function appointmentTemplateNodes(): FlowNode[] {
         title: 'Appointment — {{contact.name}}',
         language: 'en',
         is_reusable: false,
+      },
+    },
+    {
+      id: 'sheet',
+      type: 'aistein_google_sheet_append_row',
+      label: 'Append booking to Google Sheet',
+      config: {
+        type: 'aistein_google_sheet_append_row',
+        spreadsheet_id: '',
+        spreadsheet_url: '',
+        sheet_tab: 'Sheet1',
+        range: 'Sheet1!A:Z',
+        values: DEFAULT_APPOINTMENT_SHEET_COLUMNS,
       },
     },
     {
@@ -513,7 +513,7 @@ export default function AutomationPage() {
     <div>
       <PageHeader
         title="Automation"
-        subtitle="Prebuilt: after a batch call completes, extract the appointment → log to Sheets → create a MeetAssistant link with your knowledge base → email the guest the join link."
+        subtitle="Prebuilt: after a batch call completes, extract the appointment → create a MeetAssistant join link → append row to Sheets (including the meet URL) → email the guest."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -1366,7 +1366,7 @@ function GoogleSheetsConfig({
     const extracted = Object.keys(jsonExample).map(
       (k) => `{{extracted.${k}}}`,
     );
-    setColumns([...contact, ...extracted]);
+    setColumns([...contact, ...extracted, '{{meeting_link}}']);
   };
 
   return (
@@ -1374,6 +1374,12 @@ function GoogleSheetsConfig({
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
         <p className="font-medium text-slate-800">Uses your connected Google Workspace account</p>
         <p className="mt-1">Append one row per completed call. Row 1 in your tab should contain headers.</p>
+        <p className="mt-1.5 text-slate-500">
+          To store the guest meet URL, put this step <span className="font-medium text-slate-700">after</span>{' '}
+          <span className="font-medium text-slate-700">MeetAssistant — create join link</span> and map{' '}
+          <code className="rounded bg-slate-100 px-1">{'{{meeting_link}}'}</code> (same value as{' '}
+          <code className="rounded bg-slate-100 px-1">{'{{app_meeting.shareUrl}}'}</code>).
+        </p>
       </div>
 
       <div>
@@ -1499,7 +1505,10 @@ function GoogleSheetsConfig({
         </ul>
         <p className="mt-2 text-xs text-slate-500">
           Variables: {'{{contact.name}}'}, {'{{contact.email}}'}, {'{{contact.phone}}'}, plus{' '}
-          {'{{extracted.*}}'} keys from your extract JSON (e.g. {'{{extracted.date}}'}).
+          {'{{extracted.*}}'} keys from your extract JSON (e.g. {'{{extracted.date}}'}). After the Create
+          MeetAssistant step runs: {'{{meeting_link}}'} or {'{{app_meeting.shareUrl}}'} for the booking’s join URL,{' '}
+          {'{{app_meeting.meetingId}}'} for the meeting id. Google Calendar step (if used):{' '}
+          {'{{calendar_event.hangoutLink}}'}, {'{{calendar_event.htmlLink}}'}.
         </p>
       </div>
 

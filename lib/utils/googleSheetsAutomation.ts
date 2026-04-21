@@ -12,7 +12,8 @@ export function parseGoogleSpreadsheetId(input: string): string {
   return s;
 }
 
-/** Default column templates for appointment batch → Sheet row (matches extract JSON example keys). */
+/** Default column templates for appointment batch → Sheet row (matches extract JSON example keys).
+ * Include {{meeting_link}} only when the Sheet step runs after “Create MeetAssistant link” in the flow. */
 export const DEFAULT_APPOINTMENT_SHEET_COLUMNS = [
   "{{contact.name}}",
   "{{contact.email}}",
@@ -21,6 +22,7 @@ export const DEFAULT_APPOINTMENT_SHEET_COLUMNS = [
   "{{extracted.time}}",
   "{{extracted.appointment_booked}}",
   "{{extracted.confidence}}",
+  "{{meeting_link}}",
 ];
 
 /** Strip wrapping quotes from a sheet name segment if present. */

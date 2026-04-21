@@ -15,6 +15,7 @@ import {
   MonitorPlay,
   MessageSquare,
   Phone,
+  PhoneOutgoing,
   Plug,
   Sparkles,
   Users,
@@ -105,32 +106,48 @@ export default function Sidebar() {
       Icon: Plug,
     },
   ] as const;
-  const voiceAgentNav = [
-    { href: "/dashboard/agents", label: "Agents", Icon: Bot },
+  /** Grouped by workflow: configure the agent, run calls, then automate. */
+  const voiceAgentGroups = [
     {
-      href: "/dashboard/phone-numbers",
-      label: "Phone Numbers",
-      Icon: Phone,
+      label: "Build & knowledge",
+      items: [
+        { href: "/dashboard/agents", label: "Agents", Icon: Bot },
+        {
+          href: "/dashboard/knowledge-bases",
+          label: "Knowledge bases",
+          Icon: BookOpen,
+        },
+      ],
     },
     {
-      href: "/dashboard/batch-calling",
-      label: "Batch Calling",
-      Icon: Video,
+      label: "Calling",
+      items: [
+        {
+          href: "/dashboard/phone-numbers",
+          label: "Phone numbers",
+          Icon: Phone,
+        },
+        {
+          href: "/dashboard/batch-calling",
+          label: "Batch calling",
+          Icon: PhoneOutgoing,
+        },
+      ],
     },
     {
-      href: "/dashboard/automation",
-      label: "Automation",
-      Icon: Zap,
-    },
-    {
-      href: "/dashboard/meet-automation",
-      label: "Meet automation",
-      Icon: Sparkles,
-    },
-    {
-      href: "/dashboard/knowledge-bases",
-      label: "Knowledge bases",
-      Icon: BookOpen,
+      label: "Automations",
+      items: [
+        {
+          href: "/dashboard/automation",
+          label: "Automation",
+          Icon: Zap,
+        },
+        {
+          href: "/dashboard/meet-automation",
+          label: "Meet automation",
+          Icon: Sparkles,
+        },
+      ],
     },
   ] as const;
 
@@ -289,16 +306,25 @@ export default function Sidebar() {
         </ul>
 
         <div className="mt-6 border-t border-slate-100 pt-4">
-          <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wide text-tertiary">
+          <p className="px-3 pb-3 text-[11px] font-medium uppercase tracking-wide text-tertiary">
             Voice Agent
           </p>
-          <ul className="space-y-1">
-            {voiceAgentNav.map((item) => (
-              <li key={item.href}>
-                <NavLink {...item} />
-              </li>
+          <div className="space-y-4">
+            {voiceAgentGroups.map((group) => (
+              <div key={group.label}>
+                <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-tertiary">
+                  {group.label}
+                </p>
+                <ul className="space-y-1">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <NavLink {...item} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
 
         {adminNav.length > 0 ? (
