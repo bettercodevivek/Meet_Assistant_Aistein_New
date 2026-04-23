@@ -1,4 +1,4 @@
-# AI Avatar Studio / Meet Assistant
+# AI Avatar Studio / Meet Assistant   
 
 Full-stack **Next.js** application that combines **HeyGen Interactive Avatar** (real-time streaming avatars), **user accounts** (admin & regular users), **knowledge bases**, and **MongoDB-backed** conversation history—with optional **OpenAI** summaries when resuming sessions.
 
