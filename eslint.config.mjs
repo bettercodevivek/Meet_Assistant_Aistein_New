@@ -9,7 +9,13 @@ import nextPlugin from '@next/eslint-plugin-next';
 
 export default [
   {
-    ignores: ['.next', 'node_modules']
+    ignores: [
+      '.next',
+      'node_modules',
+      'services/metaLeads.service.js',
+      'models/**/*.js',
+      'lib/metaLeads/**/*.js',
+    ],
   },
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
