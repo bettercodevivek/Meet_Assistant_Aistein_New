@@ -13,6 +13,12 @@ function clampInt(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
+function isPhoneNumberNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message || '';
+  return msg.includes('Document with id') && msg.includes('not found');
+}
+
 // POST submit batch call
 export async function POST(request: NextRequest) {
   try {
@@ -174,13 +180,38 @@ export async function POST(request: NextRequest) {
     const effectivePhoneNumberId = phoneNumber.elevenlabs_phone_number_id || phone_number_id;
     console.log('[POST /api/v1/batch-calling/submit] Using phone_number_id:', effectivePhoneNumberId);
 
-    // Submit batch call via Python API
-    const pythonApiResponse = await submitBatchCall({
-      agent_id,
-      call_name,
-      phone_number_id: effectivePhoneNumberId,
-      recipients: apiRecipients,
-    });
+    // Submit batch call via Python API.
+    // Some records have stale mapped elevenlabs_phone_number_id values; in that case,
+    // retry once with the user-selected phone_number_id.
+    let pythonApiResponse;
+    try {
+      pythonApiResponse = await submitBatchCall({
+        agent_id,
+        call_name,
+        phone_number_id: effectivePhoneNumberId,
+        recipients: apiRecipients,
+      });
+    } catch (e) {
+      const shouldRetryWithSelectedId =
+        effectivePhoneNumberId !== phone_number_id &&
+        isPhoneNumberNotFoundError(e);
+      if (!shouldRetryWithSelectedId) {
+        throw e;
+      }
+      console.warn(
+        '[POST /api/v1/batch-calling/submit] Falling back to selected phone_number_id after mapped id failed:',
+        {
+          mapped_phone_number_id: effectivePhoneNumberId,
+          selected_phone_number_id: phone_number_id,
+        },
+      );
+      pythonApiResponse = await submitBatchCall({
+        agent_id,
+        call_name,
+        phone_number_id,
+        recipients: apiRecipients,
+      });
+    }
 
     console.log('[POST /api/v1/batch-calling/submit] Python API Response:', pythonApiResponse);
 

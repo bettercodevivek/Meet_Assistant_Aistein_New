@@ -7,6 +7,7 @@ import {
   BookOpen,
   Bot,
   ChevronDown,
+  Database,
   KeyRound,
   Images,
   LayoutDashboard,
@@ -124,6 +125,7 @@ export default function Sidebar() {
       label: "Integrations",
       Icon: Plug,
     },
+    { href: "/dashboard/meta-leads", label: "Meta leads", Icon: Database },
   ] as const;
   /** Grouped by workflow: configure the agent, run calls, then automate. */
   const voiceAgentGroups = [

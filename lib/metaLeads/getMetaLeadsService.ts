@@ -12,6 +12,7 @@ export type MetaLeadsServiceModule = {
     limit?: string;
   }) => Promise<unknown>;
   runPeriodicLeadSync: () => Promise<unknown>;
+  getPeriodicSyncStatus: () => Promise<unknown>;
 };
 
 let cached: MetaLeadsServiceModule | null = null;

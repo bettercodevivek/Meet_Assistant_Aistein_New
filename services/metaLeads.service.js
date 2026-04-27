@@ -4,7 +4,7 @@ const MetaLeadFormSync = require('../models/metaLeadFormSync.model');
 const logger = require('../lib/metaLeads/logger');
 const { connectDb } = require('../lib/metaLeads/mongoose');
 
-const GRAPH_VERSION = 'v19.0';
+const GRAPH_VERSION = process.env.META_GRAPH_API_VERSION || process.env.FB_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 function sleep(ms) {
@@ -67,8 +67,8 @@ async function graphGetJson(url) {
 }
 
 async function fetchLeadFromGraph(leadgenId) {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
-  if (!token) throw new Error('META_PAGE_ACCESS_TOKEN missing');
+  const token = process.env.META_PAGE_ACCESS_TOKEN || process.env.FB_ACCESS_TOKEN;
+  if (!token) throw new Error('META_PAGE_ACCESS_TOKEN or FB_ACCESS_TOKEN missing');
   const u = new URL(`${GRAPH_BASE}/${encodeURIComponent(leadgenId)}`);
   u.searchParams.set('fields', 'created_time,field_data,form_id,page_id');
   u.searchParams.set('access_token', token);
@@ -174,21 +174,26 @@ async function listLeads({ form_id, created_time_from, created_time_to, page, li
 }
 
 function parseFormIdsEnv() {
-  const raw = process.env.META_LEAD_FORM_IDS || process.env.META_FORM_IDS || '';
+  const raw =
+    process.env.META_LEAD_FORM_IDS ||
+    process.env.META_FORM_IDS ||
+    process.env.FB_FORM_ID ||
+    '';
   return raw
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
-async function fetchFormLeadIdsSince(formId, sinceUnix) {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
-  if (!token) throw new Error('META_PAGE_ACCESS_TOKEN missing');
+async function fetchFormLeadsSince(formId, sinceUnix) {
+  const token = process.env.META_PAGE_ACCESS_TOKEN || process.env.FB_ACCESS_TOKEN;
+  if (!token) throw new Error('META_PAGE_ACCESS_TOKEN or FB_ACCESS_TOKEN missing');
   const filtering = encodeURIComponent(
     JSON.stringify([{ field: 'time_created', operator: 'GREATER_THAN', value: sinceUnix }]),
   );
   const leads = [];
-  let url = `${GRAPH_BASE}/${encodeURIComponent(formId)}/leads?fields=id,created_time&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
+  const fields = encodeURIComponent('id,created_time,field_data,ad_id,campaign_id,form_id,page_id');
+  let url = `${GRAPH_BASE}/${encodeURIComponent(formId)}/leads?fields=${fields}&filtering=${filtering}&access_token=${encodeURIComponent(token)}`;
   let guard = 0;
   while (url && guard < 50) {
     guard += 1;
@@ -196,7 +201,15 @@ async function fetchFormLeadIdsSince(formId, sinceUnix) {
     const data = json.data;
     if (Array.isArray(data)) {
       for (const row of data) {
-        if (row.id) leads.push({ id: String(row.id), created_time: row.created_time || '' });
+        if (row.id) {
+          leads.push({
+            id: String(row.id),
+            created_time: row.created_time || '',
+            field_data: Array.isArray(row.field_data) ? row.field_data : [],
+            form_id: String(row.form_id || formId),
+            page_id: String(row.page_id || process.env.META_PAGE_ID || ''),
+          });
+        }
       }
     }
     url = json.paging?.next || null;
@@ -204,23 +217,32 @@ async function fetchFormLeadIdsSince(formId, sinceUnix) {
   return leads;
 }
 
-async function syncSingleForm(formId) {
+async function syncSingleForm(formId, runStartedUnix) {
   await connectDb();
   const row = await MetaLeadFormSync.findOne({ form_id: formId });
   const nowUnix = Math.floor(Date.now() / 1000);
   const storedLast = row?.last_sync_unix ?? 0;
   const sinceUnix = storedLast > 0 ? storedLast : nowUnix - 7 * 86400;
-  const summaries = await fetchFormLeadIdsSince(formId, sinceUnix);
+  const summaries = await fetchFormLeadsSince(formId, sinceUnix);
   let stored = 0;
-  for (const { id: leadgen_id } of summaries) {
+  for (const lead of summaries) {
+    const leadgen_id = lead.id;
     const exists = await Lead.findOne({ leadgen_id }).select('_id').lean();
     if (exists) continue;
     try {
-      const graphPayload = await fetchLeadFromGraph(leadgen_id);
+      const graphPayload =
+        Array.isArray(lead.field_data) && lead.field_data.length > 0
+          ? {
+              created_time: lead.created_time,
+              field_data: lead.field_data,
+              form_id: lead.form_id,
+              page_id: lead.page_id,
+            }
+          : await fetchLeadFromGraph(leadgen_id);
       const r = await saveLeadFromGraphPayload({
         leadgen_id,
-        form_id: String(graphPayload.form_id || formId),
-        page_id: String(graphPayload.page_id || process.env.META_PAGE_ID || ''),
+        form_id: String(graphPayload.form_id || lead.form_id || formId),
+        page_id: String(graphPayload.page_id || lead.page_id || process.env.META_PAGE_ID || ''),
         graphPayload,
       });
       if (!r.skipped) stored += 1;
@@ -238,27 +260,79 @@ async function syncSingleForm(formId) {
     : Math.max(storedLast, nowUnix - 60);
   await MetaLeadFormSync.findOneAndUpdate(
     { form_id: formId },
-    { $set: { last_sync_unix: nextLast } },
+    {
+      $set: {
+        last_sync_unix: nextLast,
+        last_run_at_unix: runStartedUnix,
+        last_run_candidates: summaries.length,
+        last_run_stored: stored,
+      },
+    },
     { upsert: true, new: true },
   );
   logger.info({ msg: 'meta_form_sync_done', form_id: formId, candidates: summaries.length, stored });
+  return { form_id: formId, candidates: summaries.length, stored };
 }
 
 async function runPeriodicLeadSync() {
   await connectDb();
   const forms = parseFormIdsEnv();
+  const runStartedUnix = Math.floor(Date.now() / 1000);
   if (forms.length === 0) {
     logger.warn({ msg: 'meta_cron_no_form_ids' });
-    return { forms: 0 };
+    return {
+      forms: 0,
+      forms_scanned: 0,
+      candidates: 0,
+      stored: 0,
+      last_run_at_unix: runStartedUnix,
+    };
   }
+  let formsScanned = 0;
+  let totalCandidates = 0;
+  let totalStored = 0;
   for (const formId of forms) {
     try {
-      await syncSingleForm(formId);
+      const r = await syncSingleForm(formId, runStartedUnix);
+      formsScanned += 1;
+      totalCandidates += r.candidates;
+      totalStored += r.stored;
     } catch (e) {
       logger.error({ msg: 'meta_form_sync_error', form_id: formId, err: String(e) });
     }
   }
-  return { forms: forms.length };
+  return {
+    forms: forms.length,
+    forms_scanned: formsScanned,
+    candidates: totalCandidates,
+    stored: totalStored,
+    last_run_at_unix: runStartedUnix,
+  };
+}
+
+async function getPeriodicSyncStatus() {
+  await connectDb();
+  const forms = parseFormIdsEnv();
+  if (forms.length === 0) {
+    return {
+      forms_configured: 0,
+      forms_scanned: 0,
+      last_run_at_unix: 0,
+      last_run_candidates: 0,
+      last_run_stored: 0,
+    };
+  }
+
+  const rows = await MetaLeadFormSync.find({ form_id: { $in: forms } }).lean();
+  const lastRun = rows.reduce((m, r) => Math.max(m, Number(r?.last_run_at_unix || 0)), 0);
+  const rowsInLatestRun = lastRun > 0 ? rows.filter((r) => Number(r?.last_run_at_unix || 0) === lastRun) : [];
+  return {
+    forms_configured: forms.length,
+    forms_scanned: rowsInLatestRun.length,
+    last_run_at_unix: lastRun,
+    last_run_candidates: rowsInLatestRun.reduce((s, r) => s + Number(r?.last_run_candidates || 0), 0),
+    last_run_stored: rowsInLatestRun.reduce((s, r) => s + Number(r?.last_run_stored || 0), 0),
+  };
 }
 
 module.exports = {
@@ -271,4 +345,5 @@ module.exports = {
   processWebhookBody,
   listLeads,
   runPeriodicLeadSync,
+  getPeriodicSyncStatus,
 };
